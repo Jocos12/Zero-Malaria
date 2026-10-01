@@ -1,6 +1,6 @@
-# ZeroMalaria
+   # ZeroMalaria
 
-**AI for Public Good Challenge Hackathon** — University of Rwanda, UR UNIPOD  
+
 **Sector:** Health · **Intended owner institution:** Rwanda Biomedical Centre (RBC)
 
 Offline-first, AI-assisted malaria **triage and referral** platform for Rwanda:
