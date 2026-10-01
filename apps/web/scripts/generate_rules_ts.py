@@ -17,8 +17,7 @@ def main() -> None:
     cfg = yaml.safe_load(YAML_PATH.read_text(encoding="utf-8"))
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(cfg, indent=2)
-    content = f"""/* eslint-disable */
-/* AUTO-GENERATED from rules/malaria_rules.yaml — do not edit by hand.
+    content = f"""/* AUTO-GENERATED from rules/malaria_rules.yaml — do not edit by hand.
  * Run: python apps/web/scripts/generate_rules_ts.py
  * PLACEHOLDER - TO BE VALIDATED against Rwanda national malaria treatment guidelines
  * and WHO iCCM guidance by a clinician.

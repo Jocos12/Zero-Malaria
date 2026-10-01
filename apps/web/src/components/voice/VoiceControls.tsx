@@ -20,11 +20,9 @@ function sourceLabel(
   lang: 'rw' | 'en',
 ): string | null {
   if (!source) return null;
-  if (source === 'cloud' && lang === 'rw') return t('voice.sourceHumanRw');
   const map: Record<PlaybackSource, string> = {
-    audio_pack: t('voice.sourceAudioPack'),
-    cloud: t('voice.sourceCloud'),
-    browser: t('voice.sourceBrowser'),
+    audio_pack: lang === 'rw' ? t('voice.sourceAudioPackRw') : t('voice.sourceAudioPack'),
+    pindo: t('voice.sourceHumanRw'),
     text: t('voice.sourceText'),
   };
   return map[source];

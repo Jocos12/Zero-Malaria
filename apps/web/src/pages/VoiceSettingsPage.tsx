@@ -7,7 +7,6 @@ import { ChwShell, WebShell } from '../components/shells';
 import { Badge, Button, Card, SegmentedControl } from '../components/ui';
 import { useVoice } from '../voice/VoiceContext';
 import {
-  browserTtsMatchesLang,
   getLanguageCapabilities,
   getSpeed,
   isMuted,
@@ -35,13 +34,10 @@ export function VoiceSettingsPage() {
   const [serverCaps, setServerCaps] = useState<Record<string, unknown> | null>(null);
 
   const caps = getLanguageCapabilities(lang);
-  const ttsOk = browserTtsMatchesLang(lang);
   const ttsRw = serverCaps?.tts_rw as { available?: boolean; mode?: string; self_test?: string } | undefined;
   const ttsEn = serverCaps?.tts_en as { available?: boolean; mode?: string; self_test?: string } | undefined;
   const ttsAvailable =
-    lang === 'rw'
-      ? Boolean(ttsRw?.available ?? audioPack)
-      : Boolean(ttsEn?.available ?? (ttsOk || audioPack));
+    lang === 'rw' && (Boolean(ttsRw?.available) || Boolean(audioPack) || Boolean(cloudOk));
 
   useEffect(() => {
     void probePreRecordedAudio(lang).then(setAudioPack);
@@ -70,14 +66,10 @@ export function VoiceSettingsPage() {
         </h2>
         <ul className="mt-3 space-y-2 text-sm">
           <li className="flex items-center justify-between gap-2">
-            <span>{t('voiceSettings.speechSynthesis')} ({lang})</span>
+            <span>{t('voiceSettings.speechSynthesis')}</span>
             <Badge tone={ttsAvailable ? 'success' : 'warning'}>
               {ttsAvailable ? t('voiceSettings.available') : t('voiceSettings.unavailable')}
             </Badge>
-          </li>
-          <li className="flex items-center justify-between gap-2 text-xs text-ink-muted">
-            <span>{t('voiceSettings.ttsBrowserDetail')}</span>
-            <span>{ttsOk ? '✓' : '·'}</span>
           </li>
           <li className="flex items-center justify-between gap-2">
             <span>{t('voiceSettings.speechRecognition')}</span>

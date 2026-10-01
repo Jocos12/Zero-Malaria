@@ -3,35 +3,43 @@
 demo:
 	@echo "Run scripts/demo.ps1 on Windows, or: make seed && make api & make web"
 
-VENV=.venv/Scripts
-PY=$(VENV)/python
+ifeq ($(OS),Windows_NT)
+VENV_BIN=.venv/Scripts
+PYTHON=$(VENV_BIN)/python.exe
+PY_BOOT=python
+else
+VENV_BIN=.venv/bin
+PYTHON=$(VENV_BIN)/python
+PY_BOOT=python3
+endif
+PY=$(PYTHON)
 
 install:
-	python -m venv .venv
-	$(PY) -m pip install --upgrade pip
-	$(PY) -m pip install -r apps/api/requirements.txt -r ml/requirements.txt
-	cd apps/web && npm install
+	$(PY_BOOT) -m venv .venv
+	$(PYTHON) -m pip install --upgrade pip
+	$(PYTHON) -m pip install -r apps/api/requirements.txt -r ml/requirements.txt
+	cd apps/web && npm ci
 
 data:
-	$(PY) data/generate_synthetic.py
+	$(PYTHON) data/generate_synthetic.py
 
 train:
-	$(PY) ml/train.py
+	$(PYTHON) ml/train.py
 
 seed:
-	$(PY) apps/api/app/seed.py
+	$(PYTHON) apps/api/app/seed.py
 
 seed-demo:
-	$(PY) apps/api/app/seed.py --mode demo
+	$(PYTHON) apps/api/app/seed.py --mode demo
 
 api:
-	cd apps/api && ../.venv/Scripts/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd apps/api && ../../$(PYTHON) -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Local full stack: API with --reload (clear error if venv/uvicorn missing) + Vite web
 # Windows: powershell -File scripts/dev.ps1
 dev:
 	@echo "==> ZeroMalaria dev"
-	@test -f "$(PY)" -o -f "$(PY).exe" || (echo "ERROR: missing $(PY). Run: make install" && exit 1)
+	@test -f "$(PYTHON)" || (echo "ERROR: missing $(PYTHON). Run: make install" && exit 1)
 	@echo "==> API  http://127.0.0.1:8000  (uvicorn --reload)"
 	@echo "==> WEB  http://127.0.0.1:5173"
 	@echo "Tip (Windows): powershell -File scripts/dev.ps1"
@@ -41,5 +49,5 @@ web:
 	cd apps/web && npm run dev
 
 test:
-	$(PY) -m pytest apps/api/tests -q
+	$(PYTHON) -m pytest apps/api/tests -q
 	cd apps/web && npm test -- --run

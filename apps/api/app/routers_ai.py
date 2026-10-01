@@ -6,7 +6,7 @@ import json
 import time
 from typing import Annotated, Any, Generator, Optional
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ from app.auth import decode_token, get_current_user, require_permission, write_a
 from app.config import settings
 from app.db import User, get_db
 from app.services.ai.router import get_ai_router
+from app.services.pindo import PindoTtsError, pindo_is_configured, synthesize_pindo_tts
 
 router = APIRouter(tags=["ai"])
 _bearer_opt = HTTPBearer(auto_error=False)
@@ -80,8 +81,9 @@ class ChatBody(BaseModel):
 
 class SpeakBody(BaseModel):
     phrase_id: str | None = None
-    language: str = "rw"
-    text: str = ""
+    language: str = Field(default="rw", pattern="^rw$")
+    text: str = Field(default="", max_length=1024)
+    speech_rate: float = Field(default=1.0, ge=0.5, le=2.0)
 
 
 class AdvisoryBody(BaseModel):
@@ -734,11 +736,24 @@ def voice_speak(
     body: SpeakBody,
     user: Annotated[User, Depends(require_permission("voice:use"))],
 ) -> dict:
-    """Prefer pre-recorded phrase pack; never use English browser voice for Kinyarwanda."""
+    """Pindo TTS when configured; otherwise pre-recorded phrase pack. Never English browser voice for rw."""
     from app.services.ai.voice_stt import speak_plan
 
     del user
-    plan = speak_plan(body.text or "", phrase_id=body.phrase_id, language=body.language or "rw")
+    text = (body.text or "").strip()
+    if text and pindo_is_configured():
+        try:
+            audio_url = synthesize_pindo_tts(text, body.speech_rate)
+            return {
+                "ok": True,
+                "provider_used": "pindo",
+                "phrase_id": body.phrase_id,
+                "language": "rw",
+                "audio_url": audio_url,
+            }
+        except PindoTtsError:
+            pass  # fall back to the phrase pack below
+    plan = speak_plan(text, phrase_id=body.phrase_id, language=body.language or "rw")
     return {"ok": True, **plan}
 
 
@@ -753,6 +768,16 @@ def voice_capabilities_route(
     return voice_capabilities(language)
 
 
+@router.get("/voice/status")
+def voice_status(user: Annotated[User, Depends(get_current_user)]) -> dict:
+    return {
+        "provider": "pindo",
+        "configured": pindo_is_configured(),
+        "access_mode": settings.pindo_access_mode,
+        "supported_languages": ["rw"],
+    }
+
+
 @router.post("/voice/transcribe")
 async def voice_transcribe(
     user: Annotated[User, Depends(require_permission("voice:use"))],
@@ -760,8 +785,6 @@ async def voice_transcribe(
     language: str = Form("rw"),
 ) -> dict:
     """STT chain from ZM_STT_PROVIDER_ORDER. Auth required (voice:use). Never 401 for missing STT."""
-    from fastapi import HTTPException
-
     from app.services.ai.voice_stt import MAX_BYTES, MAX_SECONDS, provider_order, transcribe_audio
 
     del user

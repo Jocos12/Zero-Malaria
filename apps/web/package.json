@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run --exclude e2e/**",
+    "test": "vitest run --exclude 'e2e/**'",
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "i18n:check": "node scripts/i18n-check.mjs",

@@ -121,7 +121,6 @@ const T = {
   'voiceSettings.title': "Igenamiterere ry'ijwi",
   'voiceSettings.body': "Tunganya ururimi n'amajwi yo gusoma.",
   'voiceSettings.capabilities': 'Ibishoboka kuri iki gikoresho',
-  'voiceSettings.speechSynthesis': 'Ijwi riva mu nyandiko',
   'voiceSettings.speechRecognition': 'Kumenya ijwi',
   'voiceSettings.audioFiles': 'Amajwi yanditswe ({{lang}})',
   'voiceSettings.available': 'Biboneka',

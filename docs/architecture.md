@@ -129,7 +129,7 @@ flowchart LR
   subgraph tier2 [Tier 2 — online optional]
     TriageAPI[POST /triage]
     NLP[/nlp / ai routes]
-    Voice[/voice/speak]
+    Voice[/voice/speak → Pindo Kinyarwanda TTS]
   end
 
   subgraph tier3 [Tier 3 — online required]

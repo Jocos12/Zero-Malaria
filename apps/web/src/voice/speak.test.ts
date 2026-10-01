@@ -1,38 +1,24 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { browserTtsMatchesLang } from './speak';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { getLanguageCapabilities } from './speak';
 
-describe('browserTtsMatchesLang', () => {
+describe('Pindo TTS language capabilities', () => {
   beforeEach(() => {
-    vi.stubGlobal('window', {
-      speechSynthesis: {
-        getVoices: () => [],
-      },
-    });
+    vi.stubGlobal('navigator', { onLine: true });
+    vi.stubGlobal('window', {});
   });
 
-  it('allows English fallback when voice list is empty', () => {
-    expect(browserTtsMatchesLang('en')).toBe(true);
+  it('enables online Pindo TTS for Kinyarwanda', () => {
+    expect(getLanguageCapabilities('rw').ttsPindo).toBe(true);
   });
 
-  it('does not allow Kinyarwanda when only English voices exist', () => {
-    vi.stubGlobal('window', {
-      speechSynthesis: {
-        getVoices: () => [{ lang: 'en-US', name: 'English' }],
-      },
-    });
-    expect(browserTtsMatchesLang('rw')).toBe(false);
-    expect(browserTtsMatchesLang('en')).toBe(true);
+  it('does not expose English TTS', () => {
+    const capabilities = getLanguageCapabilities('en');
+    expect(capabilities.ttsPindo).toBe(false);
+    expect(capabilities.audioPack).toBe(false);
   });
 
-  it('matches Kinyarwanda voices (rw, rw-RW, kin)', () => {
-    vi.stubGlobal('window', {
-      speechSynthesis: {
-        getVoices: () => [
-          { lang: 'rw-RW', name: 'Kinyarwanda' },
-          { lang: 'en-US', name: 'English' },
-        ],
-      },
-    });
-    expect(browserTtsMatchesLang('rw')).toBe(true);
+  it('marks Pindo unavailable while offline', () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    expect(getLanguageCapabilities('rw').ttsPindo).toBe(false);
   });
 });

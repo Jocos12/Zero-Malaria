@@ -7,7 +7,7 @@ const VOLUME_KEY = 'zm_voice_volume';
 const GAIN_KEY = 'zm_voice_gain_boost';
 
 export type VoiceSpeed = 0.75 | 1 | 1.25;
-export type PlaybackSource = 'audio_pack' | 'cloud' | 'browser' | 'text';
+export type PlaybackSource = 'audio_pack' | 'pindo' | 'text';
 
 let audioUnlocked = false;
 let currentAudio: HTMLAudioElement | null = null;
@@ -171,34 +171,6 @@ export function stopSpeaking(): void {
     currentAudio.currentTime = 0;
     currentAudio = null;
   }
-  if (typeof window !== 'undefined' && window.speechSynthesis) {
-    window.speechSynthesis.cancel();
-  }
-}
-
-function speechLang(lang: VoiceLang): string {
-  return lang === 'rw' ? 'rw-RW' : 'en-US';
-}
-
-function voiceLangMatches(voiceLang: string, target: VoiceLang): boolean {
-  const v = voiceLang.toLowerCase();
-  if (target === 'rw') {
-    return v.startsWith('rw') || v.includes('kin');
-  }
-  return v.startsWith('en');
-}
-
-export function browserTtsMatchesLang(lang: VoiceLang): boolean {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return false;
-  const voices = window.speechSynthesis.getVoices();
-  if (!voices.length) return lang === 'en';
-  return voices.some((voice) => voiceLangMatches(voice.lang, lang));
-}
-
-function pickVoice(lang: VoiceLang): SpeechSynthesisVoice | undefined {
-  if (typeof window === 'undefined' || !window.speechSynthesis) return undefined;
-  const voices = window.speechSynthesis.getVoices();
-  return voices.find((v) => voiceLangMatches(v.lang, lang));
 }
 
 function sttBrowserAvailable(): boolean {
@@ -211,32 +183,15 @@ function sttBrowserAvailable(): boolean {
 }
 
 export function getLanguageCapabilities(lang: VoiceLang): {
-  ttsBrowser: boolean;
+  ttsPindo: boolean;
   sttBrowser: boolean;
   audioPack: boolean;
-  cloudReachable: boolean;
 } {
   const cachedPack = audioPackCache[lang];
   return {
-    ttsBrowser: browserTtsMatchesLang(lang),
+    ttsPindo: lang === 'rw' && (typeof navigator === 'undefined' || navigator.onLine),
     sttBrowser: sttBrowserAvailable(),
-    audioPack: cachedPack ?? false,
-    cloudReachable: typeof navigator !== 'undefined' ? navigator.onLine : false,
-  };
-}
-
-/** @deprecated use getLanguageCapabilities */
-export function getVoiceCapabilities(): {
-  speechSynthesis: boolean;
-  speechRecognition: boolean;
-  speechSynthesisLangEn: boolean;
-  speechSynthesisLangRw: boolean;
-} {
-  return {
-    speechSynthesis: typeof window !== 'undefined' && 'speechSynthesis' in window,
-    speechRecognition: sttBrowserAvailable(),
-    speechSynthesisLangEn: browserTtsMatchesLang('en'),
-    speechSynthesisLangRw: browserTtsMatchesLang('rw'),
+    audioPack: lang === 'rw' && (cachedPack ?? false),
   };
 }
 
@@ -316,27 +271,30 @@ async function tryMp3(
   });
 }
 
-async function tryCloudTts(
+async function tryPindoTts(
   id: PhraseId,
   lang: VoiceLang,
   text: string,
+  speed: VoiceSpeed,
 ): Promise<{ url: string; mode: string } | null> {
+  if (lang !== 'rw') return null;
   try {
     const res = await withTimeout(
-      api.voiceSpeak({ phrase_id: id, language: lang, text }),
+      api.voiceSpeak({ phrase_id: id, language: 'rw', text, speech_rate: speed }),
       CLOUD_TTS_MS,
       { audio_url: null } as Record<string, unknown>,
     );
     const url = typeof res.audio_url === 'string' ? res.audio_url : null;
     if (!url) return null;
-    const mode = typeof res.mode === 'string' ? res.mode : 'cloud';
+    const provider = typeof res.provider_used === 'string' ? res.provider_used : '';
+    const mode = typeof res.mode === 'string' ? res.mode : provider || 'pindo';
     return { url, mode };
   } catch {
     return null;
   }
 }
 
-async function tryCloudMp3(url: string, speed: VoiceSpeed): Promise<boolean> {
+async function tryPindoAudio(url: string, speed: VoiceSpeed): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.playbackRate = speed;
@@ -359,24 +317,6 @@ async function tryCloudMp3(url: string, speed: VoiceSpeed): Promise<boolean> {
   });
 }
 
-function trySpeechSynthesis(text: string, lang: VoiceLang, speed: VoiceSpeed): Promise<boolean> {
-  return new Promise((resolve) => {
-    if (!browserTtsMatchesLang(lang)) {
-      resolve(false);
-      return;
-    }
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = speechLang(lang);
-    utter.rate = speed;
-    utter.volume = readVolume() / 100;
-    const voice = pickVoice(lang);
-    if (voice) utter.voice = voice;
-    utter.onend = () => resolve(true);
-    utter.onerror = () => resolve(false);
-    window.speechSynthesis.speak(utter);
-  });
-}
-
 async function silentHighlight(): Promise<void> {
   await new Promise((r) => setTimeout(r, SILENT_FALLBACK_MS));
 }
@@ -396,41 +336,27 @@ export async function speakPhrase(
     return { source: 'text' };
   }
 
-  const packMissing = audioPackCache[lang] === false;
-  const online = typeof navigator === 'undefined' || navigator.onLine;
-
-  // Kinyarwanda: local pack first (instant). Cloud/Pindo only if pack missing. Never Chrome.
-  if (lang === 'rw') {
-    if (audioUnlocked && !packMissing && (await tryMp3(id, lang, speed, 1200))) {
-      audioPackCache[lang] = true;
-      return { source: 'audio_pack' };
-    }
-    if (online) {
-      const cloud = await tryCloudTts(id, lang, text);
-      if (cloud && audioUnlocked && (await tryCloudMp3(cloud.url, speed))) {
-        if (cloud.mode === 'phrase_pack') return { source: 'audio_pack' };
-        return { source: 'cloud' };
-      }
-    }
+  // Pindo TTS supports Kinyarwanda only. English stays on-screen text.
+  if (lang !== 'rw') {
     await silentHighlight();
     return { source: 'text' };
   }
 
-  // English: pack → optional cloud → browser TTS.
-  if (audioUnlocked && !packMissing && (await tryMp3(id, lang, speed))) {
-    audioPackCache[lang] = true;
-    return { source: 'audio_pack' };
-  }
-
+  const online = typeof navigator === 'undefined' || navigator.onLine;
   if (online) {
-    const cloud = await tryCloudTts(id, lang, text);
-    if (cloud && audioUnlocked && (await tryCloudMp3(cloud.url, speed))) {
-      return { source: cloud.mode === 'phrase_pack' ? 'audio_pack' : 'cloud' };
+    const pindo = await tryPindoTts(id, lang, text, speed);
+    if (pindo && audioUnlocked && (await tryPindoAudio(pindo.url, speed))) {
+      if (pindo.mode === 'phrase_pack') {
+        audioPackCache[lang] = true;
+        return { source: 'audio_pack' };
+      }
+      return { source: 'pindo' };
     }
   }
 
-  if (await trySpeechSynthesis(text, lang, speed)) {
-    return { source: 'browser' };
+  if (audioUnlocked && (await tryMp3(id, lang, speed))) {
+    audioPackCache[lang] = true;
+    return { source: 'audio_pack' };
   }
 
   await silentHighlight();
@@ -470,8 +396,8 @@ export async function probePreRecordedAudio(
 export async function probeCloudReachable(): Promise<boolean> {
   if (typeof navigator !== 'undefined' && !navigator.onLine) return false;
   try {
-    await api.health();
-    return true;
+    const status = await api.voiceStatus();
+    return status.provider === 'pindo' && status.configured && status.supported_languages.includes('rw');
   } catch {
     return false;
   }

@@ -226,6 +226,50 @@ def test_ai_chat_rejects_doses_and_opens_triage_on_danger():
     assert danger.data["open_triage"] is True
 
 
+def test_voice_tts_uses_pindo_and_rejects_english(client, monkeypatch):
+    token = _token(client, "chw.demo")
+    headers = {"Authorization": f"Bearer {token}"}
+    monkeypatch.setattr("app.routers_ai.pindo_is_configured", lambda: True)
+    monkeypatch.setattr(
+        "app.routers_ai.synthesize_pindo_tts",
+        lambda text, speech_rate: "https://api.pindo.io/media/generated/test.wav",
+    )
+
+    response = client.post(
+        "/voice/speak",
+        headers=headers,
+        json={
+            "phrase_id": "disclaimer",
+            "language": "rw",
+            "text": "Iki ni igikoresho gifasha gufata icyemezo.",
+            "speech_rate": 1.0,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["provider_used"] == "pindo"
+    assert response.json()["audio_url"].endswith("test.wav")
+
+    english = client.post(
+        "/voice/speak",
+        headers=headers,
+        json={
+            "phrase_id": "disclaimer",
+            "language": "en",
+            "text": "English voice is disabled.",
+            "speech_rate": 1.0,
+        },
+    )
+    assert english.status_code == 422
+
+    status = client.get("/voice/status", headers=headers)
+    assert status.json() == {
+        "provider": "pindo",
+        "configured": True,
+        "access_mode": "public",
+        "supported_languages": ["rw"],
+    }
+
+
 def test_ml_and_ai_cannot_downgrade_urgent():
     combined = assert_never_downgrade("urgent_refer", "treat_at_home")
     assert decision_rank(combined) >= decision_rank("urgent_refer")

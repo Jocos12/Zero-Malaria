@@ -2,14 +2,36 @@
 
 **Decision support tool.** Result audio uses only rules-engine output + fixed catalog text — never LLM free text.
 
-## Playback chain (per phrase + language)
+## Playback chain (Kinyarwanda only)
 
-1. Pre-recorded `/public/audio/{rw|en}/<phrase_id>.mp3` (offline, SW-cacheable)
-2. Backend `POST /voice/speak` (cloud TTS if configured; Mock otherwise)
-3. Browser `speechSynthesis` **only** if `getVoices()` has a matching language (`rw` / `rw-RW` / `kin`, or `en*`)
-4. Silent fallback with on-screen highlighted text
+1. Backend `POST /voice/speak` calls Pindo VoiceAI TTS in public or authenticated mode.
+2. Pre-recorded `/public/audio/rw/<phrase_id>.mp3` is the offline fallback.
+3. Silent fallback keeps the phrase highlighted on screen.
 
-Kinyarwanda is **never** spoken with an English voice.
+Browser `speechSynthesis` has been removed. English voice output is disabled because Pindo TTS currently supports Kinyarwanda only.
+
+## Pindo access modes
+
+Public mode is enabled by default for development. It calls the free, per-IP rate-limited `/ai/tts/rw/public` endpoint and sends no token:
+
+```dotenv
+ZM_PINDO_ACCESS_MODE=public
+```
+
+For authenticated production access:
+
+1. Sign in or register at <https://app.pindo.io/login>.
+2. Open your profile icon, then **Security**.
+3. Copy the API token and replace the placeholder in the root `.env`:
+
+```dotenv
+ZM_PINDO_API_TOKEN=your-real-token
+ZM_PINDO_ACCESS_MODE=authenticated
+ZM_PINDO_API_BASE_URL=https://api.pindo.io
+ZM_PINDO_TIMEOUT_SECONDS=20
+```
+
+The token is read only by FastAPI and is ignored in public mode. Never create a `VITE_PINDO_*` variable.
 
 ## Generate audio pack (demo / Mock)
 
@@ -29,11 +51,14 @@ Presenter menu (demo) or `/app/settings/voice-review`: play each phrase, mark Re
 
 ## Capability check
 
-Settings → Voice: reports TTS/STT/audio pack **per language**. “Available” for Kinyarwanda browser TTS only appears when a matching voice exists; otherwise show Audio pack only / Text only.
+Settings → Voice reports whether the backend has a real Pindo token configured. English is text-only.
 
 ## Env
 
 | Variable | Purpose |
 | --- | --- |
-| Cloud TTS keys | Server-side only (`ZM_*`); never `VITE_*` |
+| `ZM_PINDO_ACCESS_MODE` | `public` for free rate-limited access or `authenticated` for account billing |
+| `ZM_PINDO_API_TOKEN` | Pindo bearer token; server-side only |
+| `ZM_PINDO_API_BASE_URL` | Defaults to `https://api.pindo.io` |
+| `ZM_PINDO_TIMEOUT_SECONDS` | Pindo request timeout |
 | `VITE_DEMO_MODE` | Unlock overlay + demo presenter tools |

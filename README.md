@@ -1,6 +1,6 @@
-# ZeroMalaria
+   # ZeroMalaria
 
-**AI for Public Good Challenge Hackathon** — University of Rwanda, UR UNIPOD  
+
 **Sector:** Health · **Intended owner institution:** Rwanda Biomedical Centre (RBC)
 
 Offline-first, AI-assisted malaria **triage and referral** platform for Rwanda:
@@ -178,6 +178,10 @@ copy .env.example .env
 | `ZM_AI_TIMEOUT_SECONDS` | API | Per-provider timeout (seconds) | `8` |
 | `AI_PROVIDER_MODE` | API | `cascade` \| `race` \| `consensus` | `cascade` |
 | `AI_CIRCUIT_COOLDOWN_MINUTES` | API | Quota cooldown after 429 | `10` |
+| `ZM_PINDO_ACCESS_MODE` | API | Pindo access strategy | `public` |
+| `ZM_PINDO_API_TOKEN` | API | Kinyarwanda TTS token; leave empty in this example | empty |
+| `ZM_PINDO_API_BASE_URL` | API | Pindo API origin | `https://api.pindo.io` |
+| `ZM_PINDO_TIMEOUT_SECONDS` | API | Pindo request timeout | `20` |
 
 Check `GET /ai/health` for `{configured, reachable, quota_state, last_error}` per provider (no secrets). Vite proxies `/api/*` → API (strips `/api`).
 | `VITE_DEMO_MODE` | Web (`.env.development`) | Show demo login buttons | `true` in development; `false` in production build |
@@ -319,14 +323,17 @@ Invalid JSON / drug-dose language → reject and fall through.
 
 Visible flow: **Listen → Transcribe → Think → Speak** (UI stepper). Auth: `voice:use` + shared API client (FormData never sets Content-Type).
 
-Playback / engine order:
+Playback order for Kinyarwanda:
 
-1. `/public/audio/{rw|en}/<phrase_id>.mp3`  
-2. `POST /voice/speak` plan (phrase pack preferred)  
-3. English: `ZM_VOICE_ENGINE_EN=browser | vertex_tts | vertex_live` (Vertex needs `GOOGLE_APPLICATION_CREDENTIALS`, `ZM_GOOGLE_CLOUD_PROJECT`, `ZM_GOOGLE_CLOUD_LOCATION`; enable Speech-to-Text, Cloud Text-to-Text, Vertex AI APIs)  
-4. Kinyarwanda: pack → MMS TTS (`ZM_MMS_TTS_ENDPOINT` if set) → **text only** — never English browser voice for RW  
-5. STT: `ZM_STT_PROVIDER_ORDER` (demo default starts with `mock`)  
-6. Triage **read-aloud**: phrase-pack only (toggle on `/app/triage`); volume / Loud boost via Web Audio; `/voice/capabilities` reports honest engine status
+1. `POST /voice/speak` → Pindo VoiceAI TTS when configured (`public` or `authenticated`)
+2. `/public/audio/rw/<phrase_id>.mp3` offline phrase pack
+3. On-screen highlighted text — never an English browser voice for Kinyarwanda
+
+English playback stays on-screen text. Pindo TTS currently supports Kinyarwanda only. Optional Vertex settings (`ZM_VOICE_ENGINE_EN`, `GOOGLE_APPLICATION_CREDENTIALS`, `ZM_GOOGLE_CLOUD_PROJECT`, `ZM_GOOGLE_CLOUD_LOCATION`) remain for the API voice plan.
+
+STT: `ZM_STT_PROVIDER_ORDER` (demo default starts with `mock`). Triage read-aloud uses Pindo, then the phrase pack; volume / Loud boost via Web Audio. `/voice/status` and `/voice/capabilities` report engine status.
+
+Create a token at <https://app.pindo.io/login> (**Profile → Security**) and set `ZM_PINDO_API_TOKEN`. Leave that value empty in `.env.example`.
 
 Result decision audio uses **fixed catalog + triggered rules only** — not free LLM text. Prevention / chat answers may be spoken from guarded `/ai/chat` text after symbol cleanup. Blood-related triage questions are stored with `pending_clinical_validation` (inform nurse; no auto-escalation until RBC enables).
 
@@ -367,7 +374,8 @@ npm run screenshots
 | Seeded SQLite analytics | Real aggregates on **synthetic** data |
 | ML models | Trained on synthetic data — **architecture demo metrics only** |
 | Gemini / Groq / Vertex | Optional; without keys → **Local NLP** |
-| Cloud TTS / STT | Mock unless configured |
+| Kinyarwanda TTS | Pindo VoiceAI public rate-limited mode; authenticated mode is optional |
+| STT | Browser-based prototype; Pindo STT is not integrated yet |
 | Audio pack MP3s | Manifests / placeholders; native recordings recommended |
 | Hotspot wording | Statistical signal only — not outbreak confirmation |
 | App shell scroll / Users CRUD UI | Real UI; Playwright scroll assertions in `e2e/shell-scroll.spec.ts` (needs API + web) |

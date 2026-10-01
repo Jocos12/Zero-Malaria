@@ -583,10 +583,17 @@ export const api = {
     request<Record<string, unknown>>('/ai/insights', { method: 'POST', body: JSON.stringify(body) }),
   assistantChat: (body: { message: string; language?: string; decision?: string }) =>
     request<Record<string, unknown>>('/assistant/chat', { method: 'POST', body: JSON.stringify(body) }),
-  voiceSpeak: (body: { phrase_id?: string; language?: string; text: string }) =>
+  voiceSpeak: (body: { phrase_id?: string; language?: string; text: string; speech_rate?: number }) =>
     request<Record<string, unknown>>('/voice/speak', { method: 'POST', body: JSON.stringify(body) }),
   voiceCapabilities: (language = 'rw') =>
     request<Record<string, unknown>>(`/voice/capabilities?language=${encodeURIComponent(language)}`),
+  voiceStatus: () =>
+    request<{
+      provider: string;
+      configured: boolean;
+      access_mode: 'public' | 'authenticated';
+      supported_languages: string[];
+    }>('/voice/status'),
   voiceTranscribe: (blob: Blob, language = 'rw') => {
     const build = () => {
       const fd = new FormData();
