@@ -91,6 +91,65 @@ EXTRA_FACILITIES = [
 
 OVERDUE_SECTORS = (("Gisagara", "Save"), ("Nyamagabe", "Kibirizi"))
 
+# Login accounts for the live demo. Password is always ZM_DEMO_PASSWORD.
+DEMO_ACCOUNTS = [
+    {
+        "id": "user-chw-demo",
+        "username": "chw.demo",
+        "display_name": "CHW Demo (Nyamata)",
+        "role": "CHW",
+        "district": "Bugesera",
+        "facility_id": "HC-BUG-01",
+        "village": "Nyamata",
+        "chw_code": "CHW-BUG-01-01",
+        "phone": "+250780000001",
+    },
+    {
+        "id": "user-chw-gisagara",
+        "username": "chw.gisagara",
+        "display_name": "CHW Demo (Gisagara)",
+        "role": "CHW",
+        "district": "Gisagara",
+        "facility_id": "HC-GIS-01",
+        "village": "Gisagara",
+        "chw_code": "CHW-GIS-01-01",
+        "phone": "+250780000010",
+    },
+    {
+        "id": "user-hc-demo",
+        "username": "health.center",
+        "display_name": "Health Center Demo (Nyamata HC)",
+        "role": "HEALTH_CENTER",
+        "district": "Bugesera",
+        "facility_id": "HC-BUG-01",
+        "village": "",
+        "chw_code": "",
+        "phone": "+250780000002",
+    },
+    {
+        "id": "user-super-admin",
+        "username": "super.admin",
+        "display_name": "Super Admin Demo",
+        "role": "SUPER_ADMIN",
+        "district": "",
+        "facility_id": "",
+        "village": "",
+        "chw_code": "",
+        "phone": "+250780000099",
+    },
+    {
+        "id": "user-rbc-admin",
+        "username": "rbc.admin",
+        "display_name": "RBC Admin Demo",
+        "role": "RBC_ADMIN",
+        "district": "",
+        "facility_id": "",
+        "village": "",
+        "chw_code": "",
+        "phone": "+250780000098",
+    },
+]
+
 
 def resolve_seed_mode(cli_mode: str | None) -> str:
     mode = (cli_mode or os.environ.get("ZM_SEED_MODE") or "full").lower()
@@ -177,63 +236,7 @@ def ensure_prominent_pilot_districts(db) -> None:
 
 def seed_users(db) -> None:
     """Deterministic demo accounts: 1 SUPER_ADMIN, 1 RBC_ADMIN, HC per facility, many CHW."""
-    users = [
-        {
-            "id": "user-chw-demo",
-            "username": "chw.demo",
-            "display_name": "CHW Demo (Nyamata)",
-            "role": "CHW",
-            "district": "Bugesera",
-            "facility_id": "HC-BUG-01",
-            "village": "Nyamata",
-            "chw_code": "CHW-BUG-01-01",
-            "phone": "+250780000001",
-        },
-        {
-            "id": "user-chw-gisagara",
-            "username": "chw.gisagara",
-            "display_name": "CHW Demo (Gisagara)",
-            "role": "CHW",
-            "district": "Gisagara",
-            "facility_id": "HC-GIS-01",
-            "village": "Gisagara",
-            "chw_code": "CHW-GIS-01-01",
-            "phone": "+250780000010",
-        },
-        {
-            "id": "user-hc-demo",
-            "username": "health.center",
-            "display_name": "Health Center Demo (Nyamata HC)",
-            "role": "HEALTH_CENTER",
-            "district": "Bugesera",
-            "facility_id": "HC-BUG-01",
-            "village": "",
-            "chw_code": "",
-            "phone": "+250780000002",
-        },
-        {
-            "id": "user-super-admin",
-            "username": "super.admin",
-            "display_name": "Super Admin Demo",
-            "role": "SUPER_ADMIN",
-            "district": "",
-            "facility_id": "",
-            "village": "",
-            "chw_code": "",
-            "phone": "+250780000099",
-        },
-        {
-            "id": "user-rbc-admin",
-            "username": "rbc.admin",
-            "display_name": "RBC Admin Demo",
-            "role": "RBC_ADMIN",
-            "district": "",
-            "facility_id": "",
-            "village": "",
-            "chw_code": "",
-            "phone": "+250780000098",
-        },
-    ]
+    users = [dict(account) for account in DEMO_ACCOUNTS]
     facilities = db.query(Facility).all()
     rng = random.Random(20260930)
     # One HEALTH_CENTER per facility (skip Nyamata — already have health.center)
@@ -289,6 +292,37 @@ def seed_users(db) -> None:
             )
         )
     _ = rng
+
+
+def ensure_demo_users(db) -> int:
+    """Create the demo login accounts if the database is empty. Does not delete existing rows."""
+    from app.auth import verify_password
+
+    password_hash = hash_password(settings.demo_password)
+    created = 0
+    for account in DEMO_ACCOUNTS:
+        row = db.query(User).filter(User.username == account["username"]).first()
+        if row is None:
+            db.add(
+                User(
+                    password_hash=password_hash,
+                    active=True,
+                    must_change_password=False,
+                    password_prompt_status="dismissed",
+                    **account,
+                )
+            )
+            created += 1
+            continue
+        row.active = True
+        row.deleted_at = None
+        row.failed_login_count = 0
+        row.locked_until = None
+        row.must_change_password = False
+        row.password_prompt_status = "dismissed"
+        if not verify_password(settings.demo_password, row.password_hash):
+            row.password_hash = password_hash
+    return created
 
 
 def _chw_for_facility(facility_id: str, idx: int) -> str:
