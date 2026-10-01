@@ -336,8 +336,17 @@ class GeminiProvider(AIProvider):
     def complete(self, task: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY not configured")
-        # Network call intentionally not implemented without a key — raise to trigger fallback.
-        raise RuntimeError("Gemini live call not configured for this environment")
+        from app.services.ai.orchestrator import call_gemini_chat, build_system_prompt
+        from app.services.ai.protocol_retrieve import retrieve_protocol
+        from app.services.ai.guardrails import sanitize_case_snapshot
+
+        q = str(payload.get("question") or payload.get("summary_seed") or payload.get("free_text") or task)
+        snap = sanitize_case_snapshot(payload)
+        decision = str(snap.get("rules_decision") or payload.get("decision") or "treat_at_home")
+        excerpts = retrieve_protocol(q, limit=4)
+        system = build_system_prompt(decision, snap, excerpts, str(payload.get("language") or "en"))
+        text, _status = call_gemini_chat(system, [{"role": "user", "content": q[:2000]}])
+        return {"text": text, "summary": text, "explanation_en": text, "explanation_rw": text}
 
 
 class GroqProvider(AIProvider):
@@ -346,7 +355,17 @@ class GroqProvider(AIProvider):
     def complete(self, task: str, payload: dict[str, Any]) -> dict[str, Any]:
         if not settings.groq_api_key:
             raise RuntimeError("GROQ_API_KEY not configured")
-        raise RuntimeError("Groq live call not configured for this environment")
+        from app.services.ai.orchestrator import call_groq_chat, build_system_prompt
+        from app.services.ai.protocol_retrieve import retrieve_protocol
+        from app.services.ai.guardrails import sanitize_case_snapshot
+
+        q = str(payload.get("question") or payload.get("summary_seed") or payload.get("free_text") or task)
+        snap = sanitize_case_snapshot(payload)
+        decision = str(snap.get("rules_decision") or payload.get("decision") or "treat_at_home")
+        excerpts = retrieve_protocol(q, limit=4)
+        system = build_system_prompt(decision, snap, excerpts, str(payload.get("language") or "en"))
+        text, _status = call_groq_chat(system, [{"role": "user", "content": q[:2000]}])
+        return {"text": text, "summary": text, "explanation_en": text, "explanation_rw": text}
 
 
 class VertexProvider(AIProvider):

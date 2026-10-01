@@ -13,6 +13,11 @@ import { api, type LiveWireEvent } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/ToastProvider';
 import { useTheme } from '../theme/ThemeContext';
+import {
+  buildEventsUrl,
+  nextBackoffMs,
+  shouldFallBackToPollOnly,
+} from './sseReconnect';
 
 export const LIVE_EVENT_BUS = 'zm-live-event';
 
@@ -71,6 +76,9 @@ export function EventProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let es: EventSource | null = null;
     let pollId = 0;
+    let reconnectTimer = 0;
+    let attempt = 0;
+    let pollOnly = false;
 
     const tick = async () => {
       try {
@@ -84,46 +92,92 @@ export function EventProvider({ children }: { children: ReactNode }) {
           sinceRef.current = data.server_at;
         }
       } catch {
-        /* offline or auth  -  skip */
+        /* offline / auth — silent */
       }
     };
 
-    // Prefer SSE (token via query  -  EventSource cannot set Authorization).
-    try {
-      const base = import.meta.env.VITE_API_BASE || '/api';
-      const url = `${base}/events?access_token=${encodeURIComponent(token)}&since=${encodeURIComponent(sinceRef.current)}`;
-      es = new EventSource(url);
-      es.onmessage = (msg) => {
-        try {
-          const ev = JSON.parse(msg.data) as LiveEvent;
-          handleEvent(ev);
-          if (ev.at && ev.at > sinceRef.current) sinceRef.current = ev.at;
-        } catch {
-          /* ignore malformed */
-        }
-      };
-      es.onerror = () => {
-        es?.close();
-        es = null;
-        if (!cancelled && !pollId) {
-          void tick();
-          pollId = window.setInterval(() => void tick(), 4000);
-        }
-      };
-    } catch {
+    const startPoll = (intervalMs: number) => {
+      if (pollId) window.clearInterval(pollId);
       void tick();
-      pollId = window.setInterval(() => void tick(), 4000);
-    }
+      pollId = window.setInterval(() => void tick(), intervalMs);
+    };
 
-    // Polling fallback always as safety net (slower) if SSE stays open
-    if (!pollId) {
-      pollId = window.setInterval(() => void tick(), 12000);
-    }
+    const closeEs = () => {
+      if (es) {
+        es.onerror = null;
+        es.onmessage = null;
+        es.close();
+        es = null;
+      }
+    };
+
+    const connectSse = async () => {
+      if (cancelled || pollOnly) return;
+      closeEs();
+      try {
+        const { ticket } = await api.createEventTicket();
+        if (cancelled) return;
+        const base = import.meta.env.VITE_API_BASE || '/api';
+        const url = buildEventsUrl(base, ticket, sinceRef.current);
+        es = new EventSource(url);
+        es.onmessage = (msg) => {
+          try {
+            const ev = JSON.parse(msg.data) as LiveEvent;
+            handleEvent(ev);
+            if (ev.at && ev.at > sinceRef.current) sinceRef.current = ev.at;
+            attempt = 0;
+          } catch {
+            /* ignore malformed */
+          }
+        };
+        es.onerror = () => {
+          // Expected on API reload (ECONNRESET). No console.error — reconnect or poll.
+          closeEs();
+          if (cancelled) return;
+          attempt += 1;
+          if (shouldFallBackToPollOnly(attempt)) {
+            pollOnly = true;
+            startPoll(4000);
+            return;
+          }
+          startPoll(8000);
+          const delay = nextBackoffMs(attempt - 1);
+          reconnectTimer = window.setTimeout(() => {
+            if (!cancelled && !pollOnly) void connectSse();
+          }, delay);
+        };
+      } catch (err) {
+        if (cancelled) return;
+        const status = (err as { status?: number })?.status;
+        // Old API / missing route: stop retry storm, use poll only
+        if (status === 404 || status === 501) {
+          pollOnly = true;
+          startPoll(4000);
+          return;
+        }
+        attempt += 1;
+        if (shouldFallBackToPollOnly(attempt)) {
+          pollOnly = true;
+          startPoll(4000);
+          return;
+        }
+        startPoll(8000);
+        const delay = nextBackoffMs(attempt - 1);
+        reconnectTimer = window.setTimeout(() => {
+          if (!cancelled && !pollOnly) void connectSse();
+        }, delay);
+      }
+    };
+
+    void connectSse();
+    // Slow safety-net poll while SSE is healthy
+    startPoll(15000);
 
     return () => {
       cancelled = true;
-      es?.close();
+      closeEs();
       if (pollId) window.clearInterval(pollId);
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
     };
   }, [user, token, offlineSim, handleEvent]);
 

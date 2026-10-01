@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api/client';
 import { WebShell } from '../components/shells';
-import { Card, EmptyState, PageHeader } from '../components/ui';
+import { Button, Card, EmptyState, PageHeader } from '../components/ui';
 
 type ActivitySnap = {
   calls?: number;
@@ -18,10 +18,23 @@ type ActivitySnap = {
   as_of?: string;
 };
 
+type Ping = {
+  provider?: string;
+  configured?: boolean;
+  reachable?: boolean;
+  model?: string;
+  pass?: boolean;
+  http_status?: number | null;
+  reason?: string;
+  latency_ms?: number;
+};
+
 export function AiActivityPage() {
   const { t } = useTranslation();
   const [data, setData] = useState<ActivitySnap | null>(null);
   const [err, setErr] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [pings, setPings] = useState<Ping[] | null>(null);
 
   useEffect(() => {
     void api
@@ -30,10 +43,43 @@ export function AiActivityPage() {
       .catch(() => setErr(true));
   }, []);
 
+  const runTest = async () => {
+    setTesting(true);
+    try {
+      const res = await api.aiHealthTest();
+      setPings((res.pings as Ping[]) || []);
+    } catch {
+      setPings([{ provider: 'error', pass: false, reason: 'request failed' }]);
+    } finally {
+      setTesting(false);
+    }
+  };
+
   return (
     <WebShell title={t('ai.activityTitle')} crumbs={[t('common.appName'), t('ai.activityTitle')]}>
       <PageHeader title={t('ai.activityTitle')} subtitle={t('ai.activitySubtitle')} />
       <p className="mb-4 text-xs text-ink-muted">{t('ai.syntheticMetrics')}</p>
+      <div className="mb-4">
+        <Button size="sm" onClick={() => void runTest()} loading={testing} data-testid="ai-health-test-btn">
+          {t('ai.testConnection')}
+        </Button>
+      </div>
+      {pings ? (
+        <Card className="mb-4" data-testid="ai-health-test-results">
+          <p className="text-xs font-semibold uppercase text-ink-muted">{t('ai.testConnection')}</p>
+          <ul className="mt-2 space-y-2 text-sm">
+            {pings.map((p) => (
+              <li key={String(p.provider)} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">{p.provider}</span>
+                <span className={p.pass ? 'text-success' : 'text-warning'}>{p.reason}</span>
+                <span className="font-mono text-xs text-ink-muted">
+                  {p.model} · {p.latency_ms ?? 0}ms · HTTP {p.http_status ?? '—'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
       {err || !data ? (
         <EmptyState icon={<Activity className="h-8 w-8" />} title={t('common.empty')} />
       ) : (

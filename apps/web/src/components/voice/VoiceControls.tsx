@@ -14,11 +14,15 @@ import { useVoice, type VoiceIntents } from '../../voice/VoiceContext';
 import type { PhraseId } from '../../voice/phrases';
 import type { PlaybackSource } from '../../voice/speak';
 
-function sourceLabel(t: (k: string) => string, source: PlaybackSource | null): string | null {
+function sourceLabel(
+  t: (k: string) => string,
+  source: PlaybackSource | null,
+  lang: 'rw' | 'en',
+): string | null {
   if (!source) return null;
   const map: Record<PlaybackSource, string> = {
-    audio_pack: t('voice.sourceAudioPack'),
-    pindo: t('voice.sourcePindo'),
+    audio_pack: lang === 'rw' ? t('voice.sourceAudioPackRw') : t('voice.sourceAudioPack'),
+    pindo: t('voice.sourceHumanRw'),
     text: t('voice.sourceText'),
   };
   return map[source];
@@ -50,13 +54,13 @@ export function VoiceControls({
 
   const onListen = () => {
     voice.unlock();
-    void voice.play(phraseIds);
+    void voice.play(phraseIds, { language: lang });
   };
 
   const onHelp = () => {
     if (!helpPhraseId) return;
     voice.unlock();
-    void voice.play([helpPhraseId]);
+    void voice.play([helpPhraseId], { language: lang });
   };
 
   const onMic = () => {
@@ -78,7 +82,7 @@ export function VoiceControls({
     );
   }
 
-  const badge = sourceLabel(t, playbackSource);
+  const badge = sourceLabel(t, playbackSource, lang);
 
   return (
     <div className={cn('space-y-2', className)}>

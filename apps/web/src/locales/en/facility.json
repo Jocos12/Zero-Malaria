@@ -1,13 +1,13 @@
 {
-  "title": "Health center inbox",
-  "markReceived": "Received",
-  "markArrived": "Arrived",
-  "markTreated": "Treated",
-  "notArrived": "Not arrived",
-  "empty": "No incoming referrals.",
-  "newCount": "New",
-  "urgentCount": "Urgent",
-  "selectPrompt": "Select a referral to review the handover and update status.",
-  "updated": "Status updated",
-  "updateStatus": "Update status"
+ "title": "Health center inbox",
+ "markReceived": "Received",
+ "markArrived": "Arrived",
+ "markTreated": "Treated",
+ "notArrived": "Not arrived",
+ "empty": "No incoming referrals.",
+ "newCount": "New",
+ "urgentCount": "Urgent",
+ "selectPrompt": "Select a referral to review the handover and update status.",
+ "updated": "Status updated",
+ "updateStatus": "Update status"
 }

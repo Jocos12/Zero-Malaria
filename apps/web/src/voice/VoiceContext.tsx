@@ -33,6 +33,11 @@ export { parseVoiceIntents };
 
 type ListenResult = { transcript: string; intents: VoiceIntents };
 
+export type PlayOptions = {
+  /** Override UI language for this playback (triage always uses rw / Pindo). */
+  language?: VoiceLang;
+};
+
 type VoiceContextValue = {
   state: VoiceMachineState;
   unlocked: boolean;
@@ -43,7 +48,7 @@ type VoiceContextValue = {
   pendingTranscript: string | null;
   pendingIntents: VoiceIntents | null;
   unlock: () => void;
-  play: (ids: PhraseId[]) => Promise<void>;
+  play: (ids: PhraseId[], opts?: PlayOptions) => Promise<void>;
   stop: () => void;
   replay: () => Promise<void>;
   setSlower: () => void;
@@ -76,6 +81,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [caps, setCaps] = useState(() => getLanguageCapabilities(lang));
 
   const lastIds = useRef<PhraseId[]>([]);
+  const lastLang = useRef<VoiceLang>(lang);
   const listenResolve = useRef<((value: ListenResult | null) => void) | null>(null);
 
   useEffect(() => {
@@ -96,15 +102,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const play = useCallback(
-    async (ids: PhraseId[]) => {
+    async (ids: PhraseId[], opts?: PlayOptions) => {
       if (!ids.length) return;
+      const speakLang = opts?.language ?? lang;
       lastIds.current = ids;
+      lastLang.current = speakLang;
       stopSpeaking();
       setState('speaking');
       try {
         await speakSequence(
           ids,
-          lang,
+          speakLang,
           (id) => setHighlightId(id),
           (_id, source) => setPlaybackSource(source),
         );
@@ -116,15 +124,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   );
 
   const replay = useCallback(async () => {
-    if (lastIds.current.length) await play(lastIds.current);
+    if (lastIds.current.length) await play(lastIds.current, { language: lastLang.current });
   }, [play]);
 
   const setSlower = useCallback(() => {
     const prev = getSpeed();
-    const next: VoiceSpeed = prev === 1.2 ? 1 : prev === 1 ? 0.8 : 0.8;
+    const next: VoiceSpeed = prev === 1.25 ? 1 : prev === 1 ? 0.75 : 0.75;
     setSpeed(next);
     setSpeedState(next);
-    void play(['slower_hint', ...lastIds.current]);
+    void play(['slower_hint', ...lastIds.current], { language: lastLang.current });
   }, [play]);
 
   const setMute = useCallback((m: boolean) => {
@@ -139,9 +147,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const listen = useCallback((): Promise<ListenResult | null> => {
-    const SR =
-      (window as unknown as { SpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition ||
-      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition;
+    type Rec = {
+      lang: string;
+      interimResults: boolean;
+      maxAlternatives: number;
+      onresult: ((event: { results?: ArrayLike<ArrayLike<{ transcript?: string }>> }) => void) | null;
+      onerror: (() => void) | null;
+      onend: (() => void) | null;
+      start: () => void;
+    };
+    const w = window as unknown as {
+      SpeechRecognition?: new () => Rec;
+      webkitSpeechRecognition?: new () => Rec;
+    };
+    const SR = w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SR || !caps.sttBrowser) return Promise.resolve(null);
 
     unlock();
@@ -150,28 +169,29 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     return new Promise((resolve) => {
       listenResolve.current = resolve;
       setState('listening');
-      const rec = new SR();
-      rec.lang = lang === 'rw' ? 'rw-RW' : 'en-US';
-      rec.interimResults = false;
-      rec.maxAlternatives = 1;
-      rec.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results?.[0]?.[0]?.transcript?.trim() || '';
-        const intents = parseVoiceIntents(transcript, lang);
-        setPendingTranscript(transcript);
-        setPendingIntents(intents);
-        setState('confirming');
-        resolve({ transcript, intents });
-        listenResolve.current = null;
-      };
-      rec.onerror = () => {
-        setState('idle');
-        resolve(null);
-        listenResolve.current = null;
-      };
-      rec.onend = () => {
-        setState((s) => (s === 'listening' ? 'idle' : s));
-      };
       try {
+        const rec = new SR();
+        // Browser STT is most reliable with en-US; UI language stays separate for replies.
+        rec.lang = 'en-US';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        rec.onresult = (event) => {
+          const transcript = event.results?.[0]?.[0]?.transcript?.trim() || '';
+          const intents = parseVoiceIntents(transcript, lang);
+          setPendingTranscript(transcript);
+          setPendingIntents(intents);
+          setState('confirming');
+          resolve({ transcript, intents });
+          listenResolve.current = null;
+        };
+        rec.onerror = () => {
+          setState('idle');
+          resolve(null);
+          listenResolve.current = null;
+        };
+        rec.onend = () => {
+          setState((s) => (s === 'listening' ? 'idle' : s));
+        };
         rec.start();
       } catch {
         setState('idle');

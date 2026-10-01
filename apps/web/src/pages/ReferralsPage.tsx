@@ -29,7 +29,7 @@ export function ReferralsPage() {
   const [loading, setLoading] = useState(true);
 
   const [nowMs] = useState(() => Date.now());
-  const triagePath = isApp ? '/app/triage' : '/m/triage';
+  const triagePath = '/app/triage';
   const alertsPath = isApp ? '/app/alerts' : '/m/alerts';
 
   const load = useCallback(async () => {

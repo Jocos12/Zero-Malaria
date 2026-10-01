@@ -11,6 +11,8 @@ export default defineConfig({
   use: {
     baseURL,
     trace: 'on-first-retry',
+    // PWA Workbox otherwise serves stale bundles (breaks e2e after rebuild)
+    serviceWorkers: 'block',
   },
   projects: [
     {

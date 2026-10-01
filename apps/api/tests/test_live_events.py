@@ -1,8 +1,10 @@
-"""Live events poll scoping and referral messages."""
+"""Live events poll scoping, SSE tickets, and referral messages."""
 
 from __future__ import annotations
 
+import logging
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -16,11 +18,14 @@ if str(API_ROOT) not in sys.path:
 from app.auth import hash_password
 from app.config import settings
 from app.db import Base, Facility, User, configure_engine, init_db
+from app.logging_filters import MaskSecretsFilter
 from app.main import app
+from app.services.sse_tickets import issue_ticket, reset_tickets_for_tests
 
 
 @pytest.fixture()
 def client(tmp_path):
+    reset_tickets_for_tests()
     db_file = tmp_path / "live.db"
     configure_engine(f"sqlite:///{db_file}")
     from app import db as db_module
@@ -144,3 +149,103 @@ def test_poll_events_role_scoped(client):
     rbc_poll = client.get("/events/poll", headers={"Authorization": f"Bearer {rbc_token}"})
     assert rbc_poll.status_code == 200
     assert any(e["type"] == "referral.created" for e in rbc_poll.json()["events"])
+
+
+def test_sse_ticket_single_use_and_rejects_jwt_query(client):
+    from app.services.sse_tickets import consume_ticket
+
+    token = _login(client, "chw.demo")
+    headers = {"Authorization": f"Bearer {token}"}
+    issued = client.post("/events/ticket", headers=headers)
+    assert issued.status_code == 200
+    body = issued.json()
+    assert body["expires_in"] == 30
+    ticket = body["ticket"]
+    assert ticket and "eyJ" not in ticket  # opaque, not a JWT
+
+    # Single-use: first consume ok, second fails (same as SSE auth dependency)
+    assert consume_ticket(ticket) == "u-chw"
+    assert consume_ticket(ticket) is None
+    again = client.get(f"/events?ticket={ticket}")
+    assert again.status_code == 401
+    assert again.json()["detail"] == "invalid_or_expired_ticket"
+
+    # JWT in query is rejected
+    bad = client.get(f"/events?access_token={token}")
+    assert bad.status_code == 401
+    assert bad.json()["detail"] == "access_token_query_removed"
+
+
+def test_sse_ticket_expires(client):
+    token = _login(client, "chw.demo")
+    headers = {"Authorization": f"Bearer {token}"}
+    from app.auth import decode_token
+    from app.services.sse_tickets import consume_ticket
+
+    uid = decode_token(token)["sub"]
+    tid, _ = issue_ticket(uid, ttl_seconds=1)
+    time.sleep(1.2)
+    assert consume_ticket(tid) is None
+    r = client.get(f"/events?ticket={tid}")
+    assert r.status_code == 401
+    assert r.json()["detail"] == "invalid_or_expired_ticket"
+
+    ok = client.post("/events/ticket", headers=headers)
+    assert ok.status_code == 200
+
+
+def test_sse_stream_headers_finite(client, monkeypatch):
+    """Valid ticket opens SSE; sleep raises CancelledError so the stream ends cleanly."""
+    import asyncio
+
+    import app.routers_live as live
+
+    token = _login(client, "chw.demo")
+    ticket = client.post("/events/ticket", headers={"Authorization": f"Bearer {token}"}).json()["ticket"]
+
+    async def boom(_delay):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(live.asyncio, "sleep", boom)
+    with client.stream("GET", f"/events?ticket={ticket}&since=2020-01-01T00:00:00") as stream:
+        assert stream.status_code == 200
+        assert stream.headers.get("x-accel-buffering") == "no"
+        assert "text/event-stream" in stream.headers.get("content-type", "")
+        _ = b"".join(stream.iter_bytes())
+
+
+def test_sse_ticket_role_scope_still_applies(client):
+    """Ticket only authenticates; event rows remain role-scoped like poll."""
+    _create_referral(client)
+    chw_token = _login(client, "chw.demo")
+    hc_token = _login(client, "health.center")
+
+    # Ticket issuance requires auth; scoped poll proves RBAC still applies
+    chw_t = client.post("/events/ticket", headers={"Authorization": f"Bearer {chw_token}"})
+    hc_t = client.post("/events/ticket", headers={"Authorization": f"Bearer {hc_token}"})
+    assert chw_t.status_code == 200 and hc_t.status_code == 200
+
+    hc_poll = client.get("/events/poll", headers={"Authorization": f"Bearer {hc_token}"})
+    chw_poll = client.get("/events/poll", headers={"Authorization": f"Bearer {chw_token}"})
+    assert hc_poll.status_code == 200 and chw_poll.status_code == 200
+    assert any(e["type"] == "referral.created" for e in chw_poll.json()["events"])
+    assert any(e["type"] == "referral.created" for e in hc_poll.json()["events"])
+
+
+def test_access_log_mask_filter_hides_ticket_and_token():
+    filt = MaskSecretsFilter()
+    record = logging.LogRecord(
+        name="uvicorn.access",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg='127.0.0.1:1 - "GET /events?ticket=SECRETVALUE&access_token=JWT.HERE HTTP/1.1" 200',
+        args=(),
+        exc_info=None,
+    )
+    assert filt.filter(record) is True
+    out = record.getMessage()
+    assert "SECRETVALUE" not in out
+    assert "JWT.HERE" not in out
+    assert "ticket=***" in out
+    assert "access_token=***" in out

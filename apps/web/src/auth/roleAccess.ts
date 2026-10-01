@@ -31,11 +31,9 @@ export function isDesktopViewport() {
   return typeof window !== 'undefined' && window.innerWidth >= DESKTOP_MIN_WIDTH;
 }
 
+/** Always false: product is a single responsive web app (no mobile shell). */
 export function shouldUseMobileShell(): boolean {
-  const pref = getPreferredView();
-  if (pref === 'mobile') return true;
-  if (pref === 'web') return false;
-  return !isDesktopViewport();
+  return false;
 }
 
 const ROLE_ALLOW: Record<UserRole, string[]> = {
@@ -105,7 +103,6 @@ export function mobileHomePath(role: UserRole | string): string {
 }
 
 export function homePath(role: UserRole | string): string {
-  if (shouldUseMobileShell()) return mobileHomePath(role);
   return webHomePath(role);
 }
 
@@ -118,7 +115,7 @@ export function mapPathAcrossShells(pathname: string, toMobile: boolean, role: U
       '/app/home': '/m/home',
       '/app/chw': '/m/home',
       '/app/triage': '/m/triage',
-      '/app/result': '/m/result',
+      '/app/result': '/m/triage?result=open',
       '/app/my-referrals': '/m/referrals',
       '/app/alerts': '/m/alerts',
       '/app/settings/voice': '/m/voice-settings',
@@ -132,11 +129,11 @@ export function mapPathAcrossShells(pathname: string, toMobile: boolean, role: U
     '/m': '/app/home',
     '/m/home': '/app/home',
     '/m/triage': '/app/triage',
-    '/m/result': '/app/result',
+    '/m/result': '/app/triage?result=open',
     '/m/referrals': r === 'HEALTH_CENTER' ? '/app/referrals' : '/app/my-referrals',
     '/m/alerts': '/app/alerts',
     '/m/voice-settings': '/app/settings/voice',
-    '/m/handover': '/app/result',
+    '/m/handover': '/app/triage?result=open',
     '/m/prevention': '/app/home',
   };
   return map[path] || webHomePath(r);

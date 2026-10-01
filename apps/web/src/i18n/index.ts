@@ -1,14 +1,16 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import { enResources, frResources, rwResources } from './loadLocales';
+import { enResources, rwResources } from './loadLocales';
 
-export type AppLang = 'rw' | 'en' | 'fr';
+export type AppLang = 'rw' | 'en';
 
 /** Language from saved user choice only  -  never browser language. */
 function savedLanguage(): AppLang {
   try {
     const saved = localStorage.getItem('zm_lang');
-    if (saved === 'en' || saved === 'rw' || saved === 'fr') return saved;
+    if (saved === 'en' || saved === 'rw') return saved;
+    // Legacy FR preference maps to English
+    if (saved === 'fr') return 'en';
   } catch {
     /* ignore */
   }
@@ -17,8 +19,7 @@ function savedLanguage(): AppLang {
 
 function applyDocumentLang(lng: string) {
   if (typeof document !== 'undefined') {
-    const short = lng.startsWith('rw') ? 'rw' : lng.startsWith('fr') ? 'fr' : 'en';
-    document.documentElement.lang = short;
+    document.documentElement.lang = lng.startsWith('rw') ? 'rw' : 'en';
   }
 }
 
@@ -29,14 +30,12 @@ void i18n.use(initReactI18next).init({
   resources: {
     rw: { translation: rwResources },
     en: { translation: enResources },
-    fr: { translation: frResources },
   },
   lng: initial,
   fallbackLng: {
-    fr: ['en', 'rw'],
     default: ['rw', 'en'],
   },
-  supportedLngs: ['rw', 'en', 'fr'],
+  supportedLngs: ['rw', 'en'],
   nonExplicitSupportedLngs: true,
   load: 'languageOnly',
   interpolation: { escapeValue: false },

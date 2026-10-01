@@ -23,6 +23,34 @@ describe('offline rules engine', () => {
     expect(evaluateRules({ ...base, convulsions: true }).decision).toBe('urgent_refer');
   });
 
+  it('does not urgent-refer from blood signs alone when escalation disabled', () => {
+    const r = evaluateRules(
+      {
+        ...base,
+        pale_palms_or_eyelids: 'yes',
+        blood_in_stool: 'yes',
+      },
+      'en',
+      [
+        'age_months',
+        'sex',
+        'temperature_c',
+        'fever_days',
+        'convulsions',
+        'unable_to_drink',
+        'vomiting_everything',
+        'lethargy',
+        'severe_breathing_difficulty',
+        'pale_palms_or_eyelids',
+        'blood_in_stool',
+        'tdr_result',
+      ],
+    );
+    expect(r.decision).toBe('treat_at_home');
+    expect(r.inform_nurse_fields).toContain('pale_palms_or_eyelids');
+    expect(r.pending_blood_clinical_validation).toBe(true);
+  });
+
   it('never lets maxDecision downgrade urgent', () => {
     expect(maxDecision('urgent_refer', 'treat_at_home')).toBe('urgent_refer');
     expect(decisionRank(maxDecision('urgent_refer', 'refer'))).toBeGreaterThanOrEqual(

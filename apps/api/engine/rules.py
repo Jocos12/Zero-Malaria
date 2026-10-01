@@ -33,6 +33,13 @@ DANGER_FIELDS = (
     "severe_breathing_difficulty",
 )
 
+BLOOD_TRI_FIELDS = (
+    "pale_palms_or_eyelids",
+    "blood_in_stool",
+    "dark_or_bloody_urine",
+    "bleeding_nose_gums_skin_or_vomit_blood",
+)
+
 
 @dataclass
 class ReasonDetail:
@@ -61,6 +68,8 @@ class RulesResult:
     missing_info: list[str] = field(default_factory=list)
     protocol_reference: str = ""
     public_decision: str = ""
+    inform_nurse_fields: list[str] = field(default_factory=list)
+    pending_blood_clinical_validation: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +80,8 @@ class RulesResult:
             "reason_details": [r.to_dict() for r in self.reason_details],
             "missing_info": list(self.missing_info),
             "protocol_reference": self.protocol_reference,
+            "inform_nurse_fields": list(self.inform_nurse_fields),
+            "pending_blood_clinical_validation": self.pending_blood_clinical_validation,
         }
 
 
@@ -124,6 +135,25 @@ def _as_bool_answered(value: Any) -> bool | None:
     return bool(value)
 
 
+def _as_tri_yes(value: Any) -> bool | None:
+    """yes/no/unknown tri-state for blood-related answers. None if unanswered."""
+    if _is_missing(value):
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return int(value) == 1
+    if isinstance(value, str):
+        s = value.strip().lower()
+        if s in {"yes", "y", "1", "true"}:
+            return True
+        if s in {"no", "n", "0", "false"}:
+            return False
+        if s in {"unknown", "unk", "dont_know", "don't_know", "simbizi"}:
+            return False
+    return None
+
+
 def _format_reason(template: str, cfg: dict[str, Any]) -> str:
     return template.format(
         infant_refer_months=cfg.get("infant_refer_months", 2),
@@ -149,6 +179,8 @@ def evaluate_rules(
     triggered: list[str] = []
     details: list[ReasonDetail] = []
     missing: list[str] = []
+    inform_nurse: list[str] = []
+    pending_blood_validation = False
     decision = "treat_at_home"
     protocol_ref = str((cfg.get("meta") or {}).get("protocol_reference") or "")
 
@@ -166,6 +198,32 @@ def evaluate_rules(
             continue
         flag = _as_bool_answered(case.get(field_name))
         if flag is True:
+            decision = "urgent_refer"
+            triggered.append(str(sign["id"]))
+            text = _format_reason(sign.get(reason_key) or sign.get("reason_en", ""), cfg)
+            reasons.append(text)
+            details.append(
+                ReasonDetail(
+                    rule_id=str(sign["id"]),
+                    field=field_name,
+                    answer=True,
+                    text=text,
+                    protocol_section=sign.get("protocol_section"),
+                )
+            )
+
+    for sign in cfg.get("blood_related_signs") or []:
+        field_name = str(sign["field"])
+        if sign.get("status") == "pending_clinical_validation":
+            pending_blood_validation = True
+        if not field_answered(field_name):
+            continue
+        flag = _as_tri_yes(case.get(field_name))
+        if flag is not True:
+            continue
+        if sign.get("inform_nurse"):
+            inform_nurse.append(field_name)
+        if sign.get("escalation_enabled"):
             decision = "urgent_refer"
             triggered.append(str(sign["id"]))
             text = _format_reason(sign.get(reason_key) or sign.get("reason_en", ""), cfg)
@@ -338,4 +396,6 @@ def evaluate_rules(
         missing_info=sorted(set(missing)),
         protocol_reference=protocol_ref,
         public_decision=PUBLIC_DECISION.get(decision, decision),
+        inform_nurse_fields=sorted(set(inform_nurse)),
+        pending_blood_clinical_validation=pending_blood_validation,
     )

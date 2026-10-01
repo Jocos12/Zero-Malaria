@@ -599,6 +599,42 @@
   "patients.searchPlaceholder": {
     "status": "draft"
   },
+  "patients.emptyAction": {
+    "status": "draft"
+  },
+  "patients.filterDateFrom": {
+    "status": "draft"
+  },
+  "patients.filterDateTo": {
+    "status": "draft"
+  },
+  "patients.colCode": {
+    "status": "draft"
+  },
+  "patients.colAge": {
+    "status": "draft"
+  },
+  "patients.colSex": {
+    "status": "draft"
+  },
+  "patients.colLastTriage": {
+    "status": "draft"
+  },
+  "patients.colTreated": {
+    "status": "draft"
+  },
+  "patients.treatedYes": {
+    "status": "draft"
+  },
+  "patients.treatedNo": {
+    "status": "draft"
+  },
+  "patients.detailTimeline": {
+    "status": "draft"
+  },
+  "patients.pageOf": {
+    "status": "draft"
+  },
   "presenter.colEn": {
     "status": "draft"
   },
@@ -2039,8 +2075,7 @@
     "note": "AI advisory UI"
   },
   "result.aiEscalateHint": {
-    "status": "draft",
-    "note": "AI advisory UI"
+    "status": "draft"
   },
   "result.chwFollowAi": {
     "status": "draft",
@@ -2058,17 +2093,610 @@
     "status": "draft",
     "note": "AI advisory UI"
   },
-  "lang.french": { "status": "draft", "note": "French language option" },
-  "nav.aiActivity": { "status": "draft", "note": "AI activity nav" },
-  "voice.tooltipListen": { "status": "draft", "note": "Voice control labels" },
-  "voice.tooltipMic": { "status": "draft", "note": "Voice control labels" },
-  "voice.tooltipReplay": { "status": "draft", "note": "Voice control labels" },
-  "voice.tooltipSlower": { "status": "draft", "note": "Voice control labels" },
-  "voice.tooltipStop": { "status": "draft", "note": "Voice control labels" },
-  "voice.tooltipMute": { "status": "draft", "note": "Voice control labels" },
-  "ai.insightsTitle": { "status": "draft", "note": "AI visibility UI" },
-  "ai.askTitle": { "status": "draft", "note": "AI ask panel" },
-  "ai.consultButton": { "status": "draft", "note": "AI consult" },
-  "ai.activityTitle": { "status": "draft", "note": "AI activity page" }
+  "lang.french": {
+    "status": "draft",
+    "note": "French language option"
+  },
+  "nav.aiActivity": {
+    "status": "draft",
+    "note": "AI activity nav"
+  },
+  "voice.tooltipListen": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "voice.tooltipMic": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "voice.tooltipReplay": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "voice.tooltipSlower": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "voice.tooltipStop": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "voice.tooltipMute": {
+    "status": "draft",
+    "note": "Voice control labels"
+  },
+  "ai.insightsTitle": {
+    "status": "draft",
+    "note": "AI visibility UI"
+  },
+  "ai.askTitle": {
+    "status": "draft",
+    "note": "AI ask panel"
+  },
+  "ai.consultButton": {
+    "status": "draft",
+    "note": "AI consult"
+  },
+  "ai.activityTitle": {
+    "status": "draft",
+    "note": "AI activity page"
+  },
+  "ai.decisionLockedByProtocol": {
+    "status": "draft"
+  },
+  "ai.aiAddedBadge": {
+    "status": "draft"
+  },
+  "ai.safetyChecks": {
+    "status": "draft"
+  },
+  "ai.safetyPass": {
+    "status": "draft"
+  },
+  "ai.safetyBlocked": {
+    "status": "draft"
+  },
+  "ai.whatIf": {
+    "status": "draft"
+  },
+  "ai.whatIfRulesOnly": {
+    "status": "draft"
+  },
+  "ai.severityRisk": {
+    "status": "draft"
+  },
+  "ai.facilityReachRisk": {
+    "status": "draft"
+  },
+  "ai.notReported": {
+    "status": "draft"
+  },
+  "ai.impactTitle": {
+    "status": "draft"
+  },
+  "ai.impactUrgencyNever": {
+    "status": "draft"
+  },
+  "ai.impactWording": {
+    "status": "draft"
+  },
+  "ai.impactChecks": {
+    "status": "draft"
+  },
+  "ai.impactTime": {
+    "status": "draft"
+  },
+  "ai.showDifferences": {
+    "status": "draft"
+  },
+  "ai.aiOff": {
+    "status": "draft"
+  },
+  "ai.pipelineTitle": {
+    "status": "draft"
+  },
+  "ai.pipelineInputs": {
+    "status": "draft"
+  },
+  "ai.pipelineRules": {
+    "status": "draft"
+  },
+  "ai.pipelineMl": {
+    "status": "draft"
+  },
+  "ai.pipelineAi": {
+    "status": "draft"
+  },
+  "ai.pipelineChw": {
+    "status": "draft"
+  },
+  "ai.testSafetyLock": {
+    "status": "draft"
+  },
+  "ai.clickScoreForDetail": {
+    "status": "draft"
+  },
+  "ai.guardAction": {
+    "status": "draft"
+  },
+  "ai.guardBlockedRaw": {
+    "status": "draft"
+  },
+  "ai.guardPassHint": {
+    "status": "draft"
+  },
+  "ai.guardReason.urgency_downgrade": {
+    "status": "draft"
+  },
+  "ai.guardReason.invented_dose": {
+    "status": "draft"
+  },
+  "ai.guardReason.invented_drug": {
+    "status": "draft"
+  },
+  "ai.sameDecision": {
+    "status": "draft"
+  },
+  "ai.differs": {
+    "status": "draft"
+  },
+  "ai.mlEscalateOnly": {
+    "status": "draft"
+  },
+  "ai.effectCritical": {
+    "status": "draft"
+  },
+  "ai.effectRaises": {
+    "status": "draft"
+  },
+  "ai.effectNeutral": {
+    "status": "draft"
+  },
+  "ai.groupDanger": {
+    "status": "draft"
+  },
+  "ai.groupMeasurements": {
+    "status": "draft"
+  },
+  "ai.groupRdt": {
+    "status": "draft"
+  },
+  "ai.collapsedNeutral": {
+    "status": "draft"
+  },
+  "ai.verifyBeforeUse": {
+    "status": "draft"
+  },
+  "ai.aiBadge": {
+    "status": "draft"
+  },
+  "ai.analysisRulesOnlyBanner": {
+    "status": "draft"
+  },
+  "ai.analysisRulesAiBanner": {
+    "status": "draft"
+  },
+  "ai.itemsAddedByAiMl": {
+    "status": "draft"
+  },
+  "ai.sttUnavailable": {
+    "status": "draft"
+  },
+  "ai.sttConfirmHeard": {
+    "status": "draft"
+  },
+  "ai.voiceRwAvailable": {
+    "status": "draft"
+  },
+  "ai.voiceRwUnavailable": {
+    "status": "draft"
+  },
+  "ai.readAloudReply": {
+    "status": "draft"
+  },
+  "ai.localLimitedRw": {
+    "status": "draft"
+  },
+  "ai.compareTitle": {
+    "status": "draft"
+  },
+  "ai.compareAgree": {
+    "status": "draft"
+  },
+  "ai.compareOffline": {
+    "status": "draft"
+  },
+  "ai.compareOpinion1": {
+    "status": "draft"
+  },
+  "ai.compareOpinion2": {
+    "status": "draft"
+  },
+  "ai.compareOpinion3": {
+    "status": "draft"
+  },
+  "ai.assistantStatus": {
+    "status": "draft"
+  },
+  "ai.assistantReady": {
+    "status": "draft"
+  },
+  "ai.assistantUnavailable": {
+    "status": "draft"
+  },
+  "ai.askAnythingHint": {
+    "status": "draft"
+  },
+  "ai.autoCaseBriefPrompt": {
+    "status": "draft"
+  },
+  "ai.askWhichRules": {
+    "status": "draft"
+  },
+  "ai.askDangerSigns": {
+    "status": "draft"
+  },
+  "ai.askAnythingCase": {
+    "status": "draft"
+  },
+  "ai.askAnythingPage": {
+    "status": "draft"
+  },
+  "ai.askAnythingGeneral": {
+    "status": "draft"
+  },
+  "ai.askAnythingHintCase": {
+    "status": "draft"
+  },
+  "ai.contextCase": {
+    "status": "draft"
+  },
+  "ai.contextPage": {
+    "status": "draft"
+  },
+  "ai.contextGeneral": {
+    "status": "draft"
+  },
+  "ai.contextUseCaseOn": {
+    "status": "draft"
+  },
+  "ai.contextUseCaseOff": {
+    "status": "draft"
+  },
+  "ai.chipHomeCounts": {
+    "status": "draft"
+  },
+  "ai.chipHomePrevent": {
+    "status": "draft"
+  },
+  "ai.chipHomeReferrals": {
+    "status": "draft"
+  },
+  "ai.chipAlertsOverdue": {
+    "status": "draft"
+  },
+  "ai.chipAlertsPending": {
+    "status": "draft"
+  },
+  "ai.chipAlertsMeaning": {
+    "status": "draft"
+  },
+  "ai.chipPatientsPending": {
+    "status": "draft"
+  },
+  "ai.chipPatientsToday": {
+    "status": "draft"
+  },
+  "ai.chipPatientsFollowUp": {
+    "status": "draft"
+  },
+  "ai.chipDataMyCounts": {
+    "status": "draft"
+  },
+  "ai.chipDataPending": {
+    "status": "draft"
+  },
+  "ai.chipGeneralMalaria": {
+    "status": "draft"
+  },
+  "ai.chipTriageWhenTest": {
+    "status": "draft"
+  },
+  "ai.modeAuto": {
+    "status": "draft"
+  },
+  "ai.localModeBanner": {
+    "status": "draft"
+  },
+  "result.protocolStepsLocked": {
+    "status": "draft"
+  },
+  "result.urgentLocked": {
+    "status": "draft"
+  },
+  "result.rulesOnlyNote": {
+    "status": "draft"
+  },
+  "common.unavailable": {
+    "status": "draft"
+  },
+  "result.notAvailable": {
+    "status": "draft"
+  },
+  "result.preventionPlanTitle": {
+    "status": "draft"
+  },
+  "result.preventionWhen": {
+    "status": "draft"
+  },
+  "result.preventionWhoChw": {
+    "status": "draft"
+  },
+  "result.preventionWhoFamily": {
+    "status": "draft"
+  },
+  "result.preventionWhoFacility": {
+    "status": "draft"
+  },
+  "ai.preventionPendingValidation": {
+    "status": "draft"
+  },
+  "voice.howTitle": {
+    "status": "draft"
+  },
+  "voice.howHint": {
+    "status": "draft"
+  },
+  "voice.stepListen": {
+    "status": "draft"
+  },
+  "voice.stepTranscribe": {
+    "status": "draft"
+  },
+  "voice.stepThink": {
+    "status": "draft"
+  },
+  "voice.stepSpeak": {
+    "status": "draft"
+  },
+  "ai.decisionPath": {
+    "status": "draft"
+  },
+  "ai.answersTable": {
+    "status": "draft"
+  },
+  "ai.missingData": {
+    "status": "draft"
+  },
+  "ai.protocolEvidence": {
+    "status": "draft"
+  },
+  "ai.decisionPathInputs": {
+    "status": "draft"
+  },
+  "ai.decisionPathInputsSummary": {
+    "status": "draft"
+  },
+  "ai.decisionPathRules": {
+    "status": "draft"
+  },
+  "ai.decisionPathPrecedence": {
+    "status": "draft"
+  },
+  "ai.decisionPathFinal": {
+    "status": "draft"
+  },
+  "ai.decisionPrecedenceRulesOnly": {
+    "status": "draft"
+  },
+  "ai.decisionPrecedenceMl": {
+    "status": "draft"
+  },
+  "ai.colRuleId": {
+    "status": "draft"
+  },
+  "ai.protocolVersion": {
+    "status": "draft"
+  },
+  "ai.protocolValidationPending": {
+    "status": "draft"
+  },
+  "ai.protocolLinesTitle": {
+    "status": "draft"
+  },
+  "ai.collapsedNotReported": {
+    "status": "draft"
+  },
+  "ai.questionsToAsk": {
+    "status": "draft"
+  },
+  "ai.nurseSummarySection": {
+    "status": "draft"
+  },
+  "ai.patientCardTitle": {
+    "status": "draft"
+  },
+  "ai.cardAge": {
+    "status": "draft"
+  },
+  "ai.cardSex": {
+    "status": "draft"
+  },
+  "ai.cardRdt": {
+    "status": "draft"
+  },
+  "ai.cardDecision": {
+    "status": "draft"
+  },
+  "ai.cardSigns": {
+    "status": "draft"
+  },
+  "ai.providerStatusOk": {
+    "status": "draft"
+  },
+  "ai.providerStatusNoKey": {
+    "status": "draft"
+  },
+  "ai.providerStatusTimeout": {
+    "status": "draft"
+  },
+  "ai.providerStatusRateLimited": {
+    "status": "draft"
+  },
+  "ai.providerStatusError": {
+    "status": "draft"
+  },
+  "ai.providerChipTitle": {
+    "status": "draft"
+  },
+  "activity.recordTitle": {
+    "status": "draft"
+  },
+  "activity.recordButton": {
+    "status": "draft"
+  },
+  "activity.date": {
+    "status": "draft"
+  },
+  "activity.patientsSeen": {
+    "status": "draft"
+  },
+  "activity.patientsTreated": {
+    "status": "draft"
+  },
+  "activity.rdtDone": {
+    "status": "draft"
+  },
+  "activity.rdtPositive": {
+    "status": "draft"
+  },
+  "activity.referred": {
+    "status": "draft"
+  },
+  "activity.note": {
+    "status": "draft"
+  },
+  "activity.notePlaceholder": {
+    "status": "draft"
+  },
+  "activity.submit": {
+    "status": "draft"
+  },
+  "activity.saved": {
+    "status": "draft"
+  },
+  "activity.savedOffline": {
+    "status": "draft"
+  },
+  "activity.totalsHeading": {
+    "status": "draft"
+  },
+  "activity.autoTotal": {
+    "status": "draft"
+  },
+  "activity.manualTotal": {
+    "status": "draft"
+  },
+  "activity.combinedTotal": {
+    "status": "draft"
+  },
+  "activity.kpiPatientsOpen": {
+    "status": "draft"
+  },
+  "activity.kpiSeenToday": {
+    "status": "draft"
+  },
+  "activity.kpiTreatedToday": {
+    "status": "draft"
+  },
+  "activity.kpiTreatedWeek": {
+    "status": "draft"
+  },
+  "activity.rbcStripTitle": {
+    "status": "draft"
+  },
+  "activity.rbcStripNote": {
+    "status": "draft"
+  },
+  "activity.errInteger": {
+    "status": "draft"
+  },
+  "activity.errFutureDate": {
+    "status": "draft"
+  },
+  "activity.errVersionConflict": {
+    "status": "draft"
+  },
+  "activity.errOfflineChw": {
+    "status": "draft"
+  },
+  "activity.totalsOffline": {
+    "status": "draft"
+  },
+  "triage.bloodGroupTitle": {
+    "status": "draft",
+    "note": "STEP 3 blood-related triage group title"
+  },
+  "triage.bloodValidationNotice": {
+    "status": "draft",
+    "note": "Blood Qs: escalation off until RBC validation"
+  },
+  "triage.palePalms": {
+    "status": "draft"
+  },
+  "triage.bloodInStool": {
+    "status": "draft"
+  },
+  "triage.bloodyUrine": {
+    "status": "draft"
+  },
+  "triage.bleedingSigns": {
+    "status": "draft"
+  },
+  "triage.hemoglobin": {
+    "status": "draft"
+  },
+  "triage.hemoglobinHint": {
+    "status": "draft"
+  },
+  "triage.skipHemoglobin": {
+    "status": "draft"
+  },
+  "ai.groupBlood": {
+    "status": "draft"
+  },
+  "ai.informNurseFlag": {
+    "status": "draft"
+  },
+  "ai.bloodPendingValidation": {
+    "status": "draft",
+    "note": "To be validated by RBC clinicians"
+  },
+  "result.bloodPendingValidation": {
+    "status": "draft"
+  },
+  "result.informNurseBlood": {
+    "status": "draft"
+  },
+  "triage.readQuestionsAloud": {
+    "status": "draft"
+  },
+  "triage.readAllQuestions": {
+    "status": "draft"
+  },
+  "triage.readAloudVolume": {
+    "status": "draft"
+  },
+  "triage.readAloudLoud": {
+    "status": "draft"
+  },
+  "triage.readAloudAutoListen": {
+    "status": "draft"
+  },
+  "voiceSettings.serverSelfTest": {
+    "status": "draft"
+  },
+  "voiceSettings.vertexMissingCreds": {
+    "status": "draft"
+  }
 }
-

@@ -25,9 +25,31 @@ On `/demo/board`, click **Run loop demo**. Point at the three panes:
 
 Say: one action ripples across roles — not three disconnected apps.
 
-### 1:10–1:50 — Voice guided urgent case
-Login as CHW → `/app/chw` → **Tangira isuzuma ryo mu majwi** (or Presenter → Scripted voice demo).  
-Convulsions case → red **Byihutirwa / URGENT**. Emphasize: rules lock urgency; ML cannot downgrade; no drug names. Confirm → handover.
+### 1:10–1:50 — Web triage + read-aloud + treated counts
+Login as CHW → `/app/home` (single web app; `/m/*` redirects). Open **New triage** `/app/triage`.  
+Enable **Soma ibibazo mu majwi** (read-aloud). Answer danger signs + blood questions (pending clinical validation, inform nurse only).  
+Convulsions → red **Byihutirwa / URGENT**. Emphasize: rules lock urgency; blood Qs do not auto-escalate; ML cannot downgrade.  
+After confirm: **Patients** list shows the case; **Andika umubare w'abarwayi bavuwe** records treated numbers; RBC dashboard shows auto vs manual KPIs.  
+Global assistant (Ctrl+J): ask in French or “how many patients treated this week?” (real RBAC-scoped numbers).
+
+**30-second AI moment (Result screen):**
+1. Point at the locked red banner — “Decision set by clinical rules. AI cannot change it.”
+2. Show **What to do now** checkboxes — fixed catalog steps (not LLM).
+3. Toggle **Rules only → Rules + AI** inside AI support: risk band **High** (not a fake 100%), top factors (ML), then AI summary with discreet “Answered by Groq/Gemini”.
+4. Presenter → **Simulate offline** — decision and catalog steps unchanged; AI summary falls back to offline message.
+5. Confirm → handover.
+
+### 60-second insert — how the AI helps, and why it is safe
+Use on the Result modal after an urgent case:
+
+1. **Rules only** — grey “AI off” strip; Analysis dossier shows Decision path, Answers table, Missing data, Protocol evidence (no ML gauges, no AI meaning column). Verdict banner stays in the modal header only.
+2. Flip to **Rules + AI** — same dossier plus AI/ML chips: plain-language meanings, ML gauges, consistency, patient prevention plan, nurse summary, questions to ask. Counter of AI/ML items + Show differences.
+3. **Assistant** — ask “le patient souffre de quoi ?” → French reply + Patient card (not an English template). Chips/follow-ups match the question language. Provider chips show real `/ai/status` (ok / rate_limited / …); badge tooltip shows fallback reason.
+4. **Pipeline** — Inputs → Rules (locked) → ML → AI language → CHW confirm. Click Rules: “AI cannot lower urgency.”
+5. **Safety checks → Test safety lock** — simulated “patient is fine / dose” reply blocked in en/fr/rw; decision stays urgent.
+6. **Compare** — Gemini | Groq | Local: latency + “Same decision” / unavailable reason (never fake content).
+
+Close: AI words and checks; rules own urgency; CHW confirms.
 
 ### 1:50–2:20 — Nurse thread
 `/app/referrals` → open the urgent row → mark **Received** → send quick message “Prepare transport”.  

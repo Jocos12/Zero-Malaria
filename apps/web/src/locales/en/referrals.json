@@ -1,9 +1,9 @@
 {
-  "title": "My referrals",
-  "sent": "Sent",
-  "received": "Received",
-  "arrived": "Arrived",
-  "treated": "Treated",
-  "empty": "No referrals yet.",
-  "overdueBanner": "This patient has not arrived. Please follow up."
+ "title": "My referrals",
+ "sent": "Sent",
+ "received": "Received",
+ "arrived": "Arrived",
+ "treated": "Treated",
+ "empty": "No referrals yet.",
+ "overdueBanner": "This patient has not arrived. Please follow up."
 }

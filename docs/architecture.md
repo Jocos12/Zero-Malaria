@@ -214,6 +214,66 @@ flowchart TD
   H --> Out
 ```
 
+## Result `ai_trace` pipeline (visible AI layer)
+
+Clinical authority stays with rules. ML may only escalate. LLM / Local catalog only wording + checks.
+
+```mermaid
+flowchart LR
+  I[Inputs CHW] --> R[Rules locked]
+  R --> M[ML escalate-only]
+  M --> A[AI language layer]
+  A --> C[CHW confirm]
+  A -.->|guardrail| G[Block downgrade / drug / dose]
+  R -.->|what-if| W[Rules engine flip danger signs]
+  A --> T[ai_added + impact strip]
+  M --> S[Named scores: severity + facility reach]
+```
+
+API: `ai_trace` on `POST /triage` (`include_ai_trace`); `POST /ai/trace` (payload); `POST /ai/compare` (Gemini|Groq|Local). `ai_added` items carry `placement` (`summary` | `family` | `nurse` | `row:<question_id>`). Prevention plan from `apps/api/app/protocol/prevention.yaml` (pending clinical validation). Voice: `POST /voice/transcribe` (provider order `ZM_STT_PROVIDER_ORDER`, mock default), `GET /voice/capabilities` (self-test), `POST /voice/speak` (phrase pack → text-only for free RW). UI: Rules only vs Rules + AI on Result modal; dual-column independent scroll.
+
+## Web-only shell
+
+All product routes live under `/app/*`. Legacy `/m/*` paths redirect to the matching `/app` route. One `WebShell` (fixed sidebar, sticky header, scrollable main) serves every role from 390px to 1920px. There is no phone-frame mobile app or bottom tab bar.
+
+## Chat intent routing
+
+```mermaid
+flowchart TD
+  U[User message] --> L[Detect answer_language fr/en/rw]
+  U --> I[Code intent router]
+  L --> C[Sanitized case_context + answer_language]
+  I -->|case_summary what_now tell_family ...| C
+  C --> P[Gemini then Groq then Local]
+  P -->|wrong language / timeout / 429| F[Local phrase catalog in answer_language]
+  P --> G[Output guardrail in answer_language]
+  F --> G
+  G --> B[Structured blocks + followups]
+  B --> S[SSE done: reply blocks provider fallback_reason]
+  I -.->|unknown| Q[Clarifying question in answer_language]
+```
+
+`GET /ai/status` pings each provider (cached 60s): `ok | no_key | timeout | rate_limited | error`. Chat timeout: `ZM_AI_CHAT_TIMEOUT_SECONDS` (default 15).
+
+## Voice sequence
+
+```mermaid
+sequenceDiagram
+  participant CHW
+  participant UI as Voice stepper
+  participant API as FastAPI
+  participant STT as STT chain
+  participant Chat as /ai/chat
+  participant TTS as Pack / Vertex / browser
+  CHW->>UI: Push-to-talk
+  UI->>API: /voice/transcribe (Bearer + FormData)
+  API->>STT: mock or cloud
+  STT-->>UI: transcript
+  UI->>Chat: message + case
+  Chat-->>UI: guarded reply
+  UI->>TTS: speak (EN Vertex if configured; RW pack/text)
+```
+
 ## Single source of clinical truth
 - `rules/malaria_rules.yaml` → `apps/api/engine/rules.py`
 - Same YAML → `apps/web/scripts/generate_rules_ts.py` → `src/rules/malariaRules.generated.ts` → offline `evaluateRules`

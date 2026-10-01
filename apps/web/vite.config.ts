@@ -30,11 +30,19 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,png,woff2,json,mp3}'],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api') || url.port === '8000',
+            // Never cache voice auth uploads — stale 401s break Record
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/voice'),
+            handler: 'NetworkOnly',
+          },
+          {
+            urlPattern: ({ url }) =>
+              (url.pathname.startsWith('/api') || url.port === '8000') &&
+              !url.pathname.startsWith('/api/voice'),
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
               networkTimeoutSeconds: 3,
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
           {
@@ -63,6 +71,33 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        cookieDomainRewrite: 'localhost',
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            // Preserve Authorization on multipart uploads
+            void proxyReq;
+          });
+          // SSE / API reload: ECONNRESET is expected — do not spam the Vite console
+          proxy.on('error', (err, req, res) => {
+            const url = String(req?.url || '');
+            const code = (err as NodeJS.ErrnoException)?.code || '';
+            const expected =
+              url.includes('/events') &&
+              (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'EPIPE');
+            if (expected) {
+              if (res && 'writeHead' in res && typeof res.writeHead === 'function' && !res.headersSent) {
+                try {
+                  res.writeHead(502, { 'Content-Type': 'text/plain' });
+                  res.end('upstream unavailable');
+                } catch {
+                  /* ignore */
+                }
+              }
+              return;
+            }
+            console.error('[vite proxy]', code || err.message, url.replace(/([?&](?:access_token|ticket)=)[^&]*/gi, '$1***'));
+          });
+        },
       },
     },
   },
@@ -73,6 +108,25 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        cookieDomainRewrite: 'localhost',
+        configure: (proxy) => {
+          proxy.on('error', (err, req, res) => {
+            const url = String(req?.url || '');
+            const code = (err as NodeJS.ErrnoException)?.code || '';
+            if (url.includes('/events') && (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'EPIPE')) {
+              if (res && 'writeHead' in res && typeof res.writeHead === 'function' && !res.headersSent) {
+                try {
+                  res.writeHead(502);
+                  res.end();
+                } catch {
+                  /* ignore */
+                }
+              }
+              return;
+            }
+            console.error('[vite proxy]', code || err.message);
+          });
+        },
       },
     },
   },

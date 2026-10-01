@@ -1,14 +1,14 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { Check, Minus, Plus } from 'lucide-react';
+import { Check, Minus, Plus, Volume2 } from 'lucide-react';
 import { Orb } from '../components/liquid/alive';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 import { api } from '../api/client';
-import { ChwShell, WebShell } from '../components/shells';
-import { ConversationBar } from '../components/voice/ConversationBar';
-import { VoiceControls } from '../components/voice/VoiceControls';
+import { ResultModal } from '../components/result/ResultModal';
+import { WebShell } from '../components/shells';
+import { TriageReadAloudBar } from '../components/triage/TriageReadAloudBar';
 import { Badge, Button, Card, Input, ProgressBar, SegmentedControl, StepperLayout } from '../components/ui';
 import { type PhraseId, type VoiceLang, getPhrase } from '../voice/phrases';
 import { dialogueStepIndex } from '../voice/dialogue';
@@ -17,10 +17,14 @@ import { useVoice, type VoiceIntents } from '../voice/VoiceContext';
 import { DEMO_CASE_A, DEMO_CASE_B, DEMO_CASE_ML } from '../demo/scenario';
 import { clearTriageDraft, loadTriageDraft, saveTriageDraft } from '../db';
 import { localDecide } from '../rules/engine';
-import type { TriageInput } from '../types';
+import type { TriageInput, YesNoUnknownAnswer } from '../types';
 import { cn } from '../lib/cn';
 import { stepCardTransition } from '../lib/motion';
 import { useTheme } from '../theme/ThemeContext';
+import { insightsByField } from '../triage/localAnswerInsights';
+import { useAnswerInsights } from '../triage/useAnswerInsights';
+import { phraseIdsForTriageStep, type TriageReadAloudStep } from '../triage/triageReadAloud';
+import { loadReadAloudPrefs, saveReadAloudPrefs, type ReadAloudPrefs } from '../voice/readAloudPrefs';
 
 /** Display defaults only. Not treated as answers until the user acts. */
 const displayDefaults: TriageInput = {
@@ -46,6 +50,11 @@ type Step =
   | 'vomiting_everything'
   | 'lethargy'
   | 'breathing'
+  | 'pale_palms'
+  | 'blood_stool'
+  | 'bloody_urine'
+  | 'bleeding'
+  | 'hemoglobin'
   | 'tdr'
   | 'freetext';
 
@@ -59,9 +68,24 @@ const STEPS: Step[] = [
   'vomiting_everything',
   'lethargy',
   'breathing',
+  'pale_palms',
+  'blood_stool',
+  'bloody_urine',
+  'bleeding',
+  'hemoglobin',
   'tdr',
   'freetext',
 ];
+
+const BLOOD_TRI_STEPS = ['pale_palms', 'blood_stool', 'bloody_urine', 'bleeding'] as const;
+type BloodTriStep = (typeof BLOOD_TRI_STEPS)[number];
+
+const BLOOD_STEP_FIELD: Record<BloodTriStep, keyof TriageInput> = {
+  pale_palms: 'pale_palms_or_eyelids',
+  blood_stool: 'blood_in_stool',
+  bloody_urine: 'dark_or_bloody_urine',
+  bleeding: 'bleeding_nose_gums_skin_or_vomit_blood',
+};
 
 const CHOICE_STEPS: Step[] = [
   'sex',
@@ -70,10 +94,11 @@ const CHOICE_STEPS: Step[] = [
   'vomiting_everything',
   'lethargy',
   'breathing',
+  ...BLOOD_TRI_STEPS,
   'tdr',
 ];
 
-const STEPPER_STEPS: Step[] = ['age', 'temperature', 'feverDays'];
+const STEPPER_STEPS: Step[] = ['age', 'temperature', 'feverDays', 'hemoglobin'];
 
 const STEP_PHRASE: Partial<Record<Step, PhraseId>> = {
   age: 'age',
@@ -85,6 +110,11 @@ const STEP_PHRASE: Partial<Record<Step, PhraseId>> = {
   vomiting_everything: 'vomiting_everything',
   lethargy: 'lethargy',
   breathing: 'severe_breathing_difficulty',
+  pale_palms: 'pale_palms_or_eyelids',
+  blood_stool: 'blood_in_stool',
+  bloody_urine: 'dark_or_bloody_urine',
+  bleeding: 'bleeding_nose_gums_skin_or_vomit_blood',
+  hemoglobin: 'hemoglobin_g_dl',
   tdr: 'tdr',
 };
 
@@ -98,9 +128,42 @@ const STEP_HELP: Partial<Record<Step, PhraseId>> = {
   vomiting_everything: 'help_vomiting_everything',
   lethargy: 'help_lethargy',
   breathing: 'help_severe_breathing_difficulty',
+  pale_palms: 'help_pale_palms_or_eyelids',
+  blood_stool: 'help_blood_in_stool',
+  bloody_urine: 'help_dark_or_bloody_urine',
+  bleeding: 'help_bleeding_nose_gums_skin_or_vomit_blood',
+  hemoglobin: 'help_hemoglobin_g_dl',
   tdr: 'help_tdr',
   freetext: 'help_freetext',
 };
+
+function stepAnsweredFieldNames(s: Step, form: TriageInput): string[] {
+  if (s === 'feverDays') return ['fever_days'];
+  if (s === 'breathing') return ['severe_breathing_difficulty'];
+  if (s === 'tdr') return ['tdr_result'];
+  if (s === 'temperature') return ['temperature_c'];
+  if (s === 'age') return ['age_months'];
+  if (s === 'hemoglobin') {
+    return form.hemoglobin_g_dl != null ? ['hemoglobin_g_dl'] : [];
+  }
+  if ((BLOOD_TRI_STEPS as readonly string[]).includes(s)) {
+    return [String(BLOOD_STEP_FIELD[s as BloodTriStep])];
+  }
+  if (s === 'freetext') return [];
+  return [s];
+}
+
+function formatTriAnswer(
+  answeredStep: boolean,
+  value: YesNoUnknownAnswer | undefined,
+  t: (k: string) => string,
+  dash: string,
+): string {
+  if (!answeredStep) return dash;
+  if (value === 'yes') return t('triage.yes');
+  if (value === 'no') return t('triage.no');
+  return t('common.unknown');
+}
 
 const tempSchema = z.number().min(30).max(45);
 const AGE_CHIPS_MONTHS = [6, 12, 24, 36, 48, 59] as const;
@@ -133,6 +196,11 @@ function stepLabel(step: Step, t: (k: string) => string): string {
     vomiting_everything: t('triage.vomitingEverything'),
     lethargy: t('triage.lethargy'),
     breathing: t('triage.breathing'),
+    pale_palms: t('triage.palePalms'),
+    blood_stool: t('triage.bloodInStool'),
+    bloody_urine: t('triage.bloodyUrine'),
+    bleeding: t('triage.bleedingSigns'),
+    hemoglobin: t('triage.hemoglobin'),
     tdr: t('triage.tdr'),
     freetext: t('triage.freeText'),
   };
@@ -182,14 +250,41 @@ export function TriagePage() {
   const [stepAnsweredAt, setStepAnsweredAt] = useState<Record<string, string>>({});
   const [elapsedMs, setElapsedMs] = useState(0);
   const [draftReady, setDraftReady] = useState(false);
+  const [readAloudPrefs, setReadAloudPrefsState] = useState<ReadAloudPrefs>(() => loadReadAloudPrefs());
 
   const lang: VoiceLang = i18n.language.startsWith('rw') ? 'rw' : 'en';
   const step = STEPS[stepIndex];
   const progress = ((stepIndex + 1) / STEPS.length) * 100;
-  const resultPath = location.pathname.startsWith('/app') ? '/app/result' : '/m/result';
+  const triageBase = '/app/triage';
+  const resultOpen = params.get('result') === 'open';
   const phraseId = STEP_PHRASE[step];
   const helpId = STEP_HELP[step];
   const showContinue = STEPPER_STEPS.includes(step) || step === 'freetext';
+  const onlineNow = !offlineSim && (typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const {
+    insights: answerInsights,
+    warnings: insightWarnings,
+    dismissWarning,
+    onlineEnrichment,
+  } = useAnswerInsights(form, answered, i18n.language, onlineNow);
+  const insightMap = useMemo(() => insightsByField(answerInsights), [answerInsights]);
+
+  const openResultModal = useCallback(
+    (payload: Record<string, unknown>) => {
+      sessionStorage.setItem('zm_last_triage', JSON.stringify(payload));
+      const next = new URLSearchParams(params);
+      next.set('result', 'open');
+      navigate({ pathname: triageBase, search: `?${next.toString()}` }, { replace: false });
+    },
+    [navigate, params, triageBase],
+  );
+
+  const closeResultModal = useCallback(() => {
+    const next = new URLSearchParams(params);
+    next.delete('result');
+    const search = next.toString();
+    navigate({ pathname: triageBase, search: search ? `?${search}` : '' }, { replace: true });
+  }, [navigate, params, triageBase]);
 
   // Hydrate draft or demo seed once
   useEffect(() => {
@@ -249,15 +344,62 @@ export function TriagePage() {
     return () => window.clearTimeout(handle);
   }, [answered, ageUnit, demo, draftReady, form, freeText, startedAt, stepAnsweredAt, stepIndex]);
 
-  // No auto-play on step change — Listen is user-triggered only.
+  const setReadAloudPrefs = useCallback((next: ReadAloudPrefs) => {
+    setReadAloudPrefsState(saveReadAloudPrefs(next));
+  }, []);
 
-  // Perf log: step change → choices visible
+  const voiceRef = useRef(voice);
   useEffect(() => {
-    const label = `triage-step-${stepIndex}-choices`;
-    console.time(label);
+    voiceRef.current = voice;
+  }, [voice]);
+
+  const speakStep = useCallback((s: Step, includeOptions = true) => {
+    const q = STEP_PHRASE[s];
+    if (!q) return;
+    const ids = includeOptions
+      ? phraseIdsForTriageStep(s as TriageReadAloudStep, q)
+      : ([q] as PhraseId[]);
+    const v = voiceRef.current;
+    v.unlock();
+    if (v.mute) v.setMute(false);
+    // Always Kinyarwanda (Pindo / RW pack) — never Chrome EN TTS.
+    return v.play(ids, { language: 'rw' });
+  }, []);
+
+  useEffect(() => {
+    if (!readAloudPrefs.enabled) {
+      voiceRef.current.stop();
+    }
+  }, [readAloudPrefs.enabled]);
+
+  // Auto read-aloud: depend only on step prefs — NOT on voice.state (that was cancelling playback).
+  useEffect(() => {
+    if (!readAloudPrefs.enabled || !phraseId) return;
+    let cancelled = false;
+    void (async () => {
+      const q = STEP_PHRASE[step];
+      if (!q) return;
+      const ids = phraseIdsForTriageStep(step as TriageReadAloudStep, q);
+      const v = voiceRef.current;
+      v.unlock();
+      if (v.mute) v.setMute(false);
+      await v.play(ids, { language: 'rw' });
+      if (cancelled || !readAloudPrefs.autoListen) return;
+      if (!v.capabilities.sttBrowser) return;
+      if (CHOICE_STEPS.includes(step) || step === 'age' || step === 'temperature' || step === 'feverDays') {
+        await v.listen();
+      }
+    })();
+    return () => {
+      cancelled = true;
+      voiceRef.current.stop();
+    };
+  }, [stepIndex, readAloudPrefs.enabled, readAloudPrefs.autoListen, phraseId, step]);
+
+  // Mark choices ready after paint (no console noise in DEV)
+  useEffect(() => {
     const raf = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        console.timeEnd(label);
         cardRef.current?.setAttribute('data-choices-ready', '1');
         cardRef.current?.setAttribute('data-step', step);
       });
@@ -314,7 +456,7 @@ export function TriagePage() {
   const selectChoice = useCallback(
     (s: Step, patch: Partial<TriageInput>, flashKey?: string) => {
       if (locked) return;
-      // Gesture unlock only — never auto-play speech on step change.
+      voice.stop();
       voice.unlock();
       setLocked(true);
       setFlash(flashKey || 'ok');
@@ -347,15 +489,7 @@ export function TriagePage() {
 
   const finish = useCallback(async () => {
     if (aiSuggested) return;
-    const answeredFields = Array.from(answered).flatMap((s) => {
-      if (s === 'feverDays') return ['fever_days'];
-      if (s === 'breathing') return ['severe_breathing_difficulty'];
-      if (s === 'tdr') return ['tdr_result'];
-      if (s === 'temperature') return ['temperature_c'];
-      if (s === 'age') return ['age_months'];
-      if (s === 'freetext') return [];
-      return [s];
-    });
+    const answeredFields = Array.from(answered).flatMap((s) => stepAnsweredFieldNames(s, form));
     let result = localDecide(form, lang, answeredFields);
     // Online: merge ML layer from API (escalate-only). Seeded demo=ml forces synthetic score >= 0.35.
     const onlineNow = !offlineSim && (typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -383,6 +517,13 @@ export function TriagePage() {
               ? (remote.shap_factors as string[])
               : result.shap_factors,
             confidence: typeof remote.confidence === 'number' ? remote.confidence : result.confidence,
+            inform_nurse_fields: Array.isArray(remote.inform_nurse_fields)
+              ? (remote.inform_nurse_fields as string[])
+              : result.inform_nurse_fields,
+            pending_blood_clinical_validation:
+              typeof remote.pending_blood_clinical_validation === 'boolean'
+                ? remote.pending_blood_clinical_validation
+                : result.pending_blood_clinical_validation,
           };
         }
       } catch {
@@ -391,21 +532,29 @@ export function TriagePage() {
     }
     const endedAt = new Date().toISOString();
     const durationMs = Date.now() - new Date(startedAt).getTime();
-    // Timing kept local: TriageRequest schema has no started_at / answered_at / duration.
-    sessionStorage.setItem(
-      'zm_last_triage',
-      JSON.stringify({
-        input: form,
-        result,
-        demo,
-        ai_extract_used: aiExtractUsed,
-        answered_fields: answeredFields,
-        timing: { started_at: startedAt, ended_at: endedAt, duration_ms: durationMs, step_answered_at: stepAnsweredAt },
-      }),
-    );
     await clearTriageDraft();
-    navigate(resultPath);
-  }, [aiExtractUsed, aiSuggested, demo, form, lang, navigate, offlineSim, resultPath, startedAt, stepAnsweredAt]);
+    openResultModal({
+      input: form,
+      result,
+      demo,
+      ai_extract_used: aiExtractUsed,
+      answered_fields: answeredFields,
+      answer_insights: answerInsights,
+      timing: { started_at: startedAt, ended_at: endedAt, duration_ms: durationMs, step_answered_at: stepAnsweredAt },
+    });
+  }, [
+    aiExtractUsed,
+    aiSuggested,
+    answerInsights,
+    answered,
+    demo,
+    form,
+    lang,
+    offlineSim,
+    openResultModal,
+    startedAt,
+    stepAnsweredAt,
+  ]);
 
   const runGuidedTriage = useCallback(() => {
     voice.unlock();
@@ -423,7 +572,12 @@ export function TriagePage() {
           else if (k === 'tdr_result') markAnswered('tdr');
           else if (k === 'age_months') markAnswered('age');
           else if (k === 'temperature_c') markAnswered('temperature');
-          else if (k === 'sex') markAnswered('sex');
+          else           if (k === 'sex') markAnswered('sex');
+          else if (k === 'pale_palms_or_eyelids') markAnswered('pale_palms');
+          else if (k === 'blood_in_stool') markAnswered('blood_stool');
+          else if (k === 'dark_or_bloody_urine') markAnswered('bloody_urine');
+          else if (k === 'bleeding_nose_gums_skin_or_vomit_blood') markAnswered('bleeding');
+          else if (k === 'hemoglobin_g_dl') markAnswered('hemoglobin');
           else if ((STEPS as string[]).includes(k)) markAnswered(k as Step);
         }
       },
@@ -439,27 +593,46 @@ export function TriagePage() {
           'vomiting_everything',
           'lethargy',
           'severe_breathing_difficulty',
+          'pale_palms_or_eyelids',
+          'blood_in_stool',
+          'dark_or_bloody_urine',
+          'bleeding_nose_gums_skin_or_vomit_blood',
+          ...(completed.hemoglobin_g_dl != null ? ['hemoglobin_g_dl'] : []),
           'tdr_result',
         ];
         const result = localDecide(completed, lang, answeredFields);
         const endedAt = new Date().toISOString();
         const durationMs = Date.now() - new Date(startedAt).getTime();
-        sessionStorage.setItem(
-          'zm_last_triage',
-          JSON.stringify({
-            input: completed,
-            result,
-            demo,
-            ai_extract_used: aiExtractUsed,
-            answered_fields: answeredFields,
-            timing: { started_at: startedAt, ended_at: endedAt, duration_ms: durationMs, step_answered_at: stepAnsweredAt },
-          }),
-        );
         void clearTriageDraft();
-        navigate(resultPath);
+        openResultModal({
+          input: completed,
+          result,
+          demo,
+          ai_extract_used: aiExtractUsed,
+          answered_fields: answeredFields,
+          answer_insights: answerInsights,
+          timing: {
+            started_at: startedAt,
+            ended_at: endedAt,
+            duration_ms: durationMs,
+            step_answered_at: stepAnsweredAt,
+          },
+        });
       },
     });
-  }, [aiExtractUsed, conversation, demo, form, lang, markAnswered, navigate, resultPath, startedAt, stepAnsweredAt, voice]);
+  }, [
+    aiExtractUsed,
+    answerInsights,
+    conversation,
+    demo,
+    form,
+    lang,
+    markAnswered,
+    openResultModal,
+    startedAt,
+    stepAnsweredAt,
+    voice,
+  ]);
 
   useEffect(() => {
     if (!voiceGuide || voiceGuideStarted.current) return;
@@ -491,6 +664,15 @@ export function TriagePage() {
       if (step === 'breathing') {
         if (intents.yes) selectChoice('breathing', { severe_breathing_difficulty: true }, 'yes');
         if (intents.no) selectChoice('breathing', { severe_breathing_difficulty: false }, 'no');
+      }
+      if ((BLOOD_TRI_STEPS as readonly string[]).includes(step)) {
+        const field = BLOOD_STEP_FIELD[step as BloodTriStep];
+        if (intents.yes) selectChoice(step, { [field]: 'yes' } as Partial<TriageInput>, 'yes');
+        if (intents.no) selectChoice(step, { [field]: 'no' } as Partial<TriageInput>, 'no');
+        if (intents.unknown) selectChoice(step, { [field]: 'unknown' } as Partial<TriageInput>, 'unknown');
+      }
+      if (step === 'hemoglobin' && intents.number !== undefined) {
+        selectChoice('hemoglobin', { hemoglobin_g_dl: intents.number }, String(intents.number));
       }
       if (step === 'tdr') {
         if (intents.positive) selectChoice('tdr', { tdr_result: 'positive' }, 'positive');
@@ -538,12 +720,25 @@ export function TriagePage() {
         if (k === 'y' || k === 'arrowleft') {
           e.preventDefault();
           if (step === 'breathing') selectChoice('breathing', { severe_breathing_difficulty: true }, 'yes');
-          else selectChoice(step, { [step]: true } as Partial<TriageInput>, 'yes');
+          else if ((BLOOD_TRI_STEPS as readonly string[]).includes(step)) {
+            const field = BLOOD_STEP_FIELD[step as BloodTriStep];
+            selectChoice(step, { [field]: 'yes' } as Partial<TriageInput>, 'yes');
+          } else selectChoice(step, { [step]: true } as Partial<TriageInput>, 'yes');
         }
         if (k === 'n' || k === 'arrowright') {
           e.preventDefault();
           if (step === 'breathing') selectChoice('breathing', { severe_breathing_difficulty: false }, 'no');
-          else selectChoice(step, { [step]: false } as Partial<TriageInput>, 'no');
+          else if ((BLOOD_TRI_STEPS as readonly string[]).includes(step)) {
+            const field = BLOOD_STEP_FIELD[step as BloodTriStep];
+            selectChoice(step, { [field]: 'no' } as Partial<TriageInput>, 'no');
+          } else selectChoice(step, { [step]: false } as Partial<TriageInput>, 'no');
+        }
+        if (k === 'u') {
+          e.preventDefault();
+          if ((BLOOD_TRI_STEPS as readonly string[]).includes(step)) {
+            const field = BLOOD_STEP_FIELD[step as BloodTriStep];
+            selectChoice(step, { [field]: 'unknown' } as Partial<TriageInput>, 'unknown');
+          }
         }
       }
 
@@ -659,54 +854,110 @@ export function TriagePage() {
   const dash = t('triage.notAnswered');
 
   const summaryRows = useMemo(() => {
-    const row = (label: string, value: string) => ({ label, value });
+    const row = (field: string, label: string, value: string) => ({ field, label, value });
     return [
       row(
+        'age',
         t('triage.age'),
         answered.has('age') ? `${form.age_months} ${t('triage.monthsShort')}` : dash,
       ),
-      row(t('triage.sex'), answered.has('sex') ? (form.sex === 'female' ? t('triage.female') : t('triage.male')) : dash),
-      row(t('triage.temperature'), answered.has('temperature') ? `${form.temperature_c}°C` : dash),
-      row(t('triage.feverDays'), answered.has('feverDays') ? String(form.fever_days) : dash),
-      row(t('triage.convulsions'), answered.has('convulsions') ? (form.convulsions ? t('triage.yes') : t('triage.no')) : dash),
       row(
+        'sex',
+        t('triage.sex'),
+        answered.has('sex') ? (form.sex === 'female' ? t('triage.female') : t('triage.male')) : dash,
+      ),
+      row(
+        'temperature',
+        t('triage.temperature'),
+        answered.has('temperature') ? `${form.temperature_c}°C` : dash,
+      ),
+      row('feverDays', t('triage.feverDays'), answered.has('feverDays') ? String(form.fever_days) : dash),
+      row(
+        'convulsions',
+        t('triage.convulsions'),
+        answered.has('convulsions') ? (form.convulsions ? t('triage.yes') : t('triage.no')) : dash,
+      ),
+      row(
+        'unable_to_drink',
         t('triage.unableToDrink'),
         answered.has('unable_to_drink') ? (form.unable_to_drink ? t('triage.yes') : t('triage.no')) : dash,
       ),
       row(
+        'vomiting_everything',
         t('triage.vomitingEverything'),
         answered.has('vomiting_everything') ? (form.vomiting_everything ? t('triage.yes') : t('triage.no')) : dash,
       ),
-      row(t('triage.lethargy'), answered.has('lethargy') ? (form.lethargy ? t('triage.yes') : t('triage.no')) : dash),
       row(
+        'lethargy',
+        t('triage.lethargy'),
+        answered.has('lethargy') ? (form.lethargy ? t('triage.yes') : t('triage.no')) : dash,
+      ),
+      row(
+        'breathing',
         t('triage.breathing'),
         answered.has('breathing') ? (form.severe_breathing_difficulty ? t('triage.yes') : t('triage.no')) : dash,
       ),
-      row(t('triage.tdr'), answered.has('tdr') ? t(`triage.${form.tdr_result}`) : dash),
+      row(
+        'pale_palms',
+        t('triage.palePalms'),
+        formatTriAnswer(answered.has('pale_palms'), form.pale_palms_or_eyelids, t, dash),
+      ),
+      row(
+        'blood_stool',
+        t('triage.bloodInStool'),
+        formatTriAnswer(answered.has('blood_stool'), form.blood_in_stool, t, dash),
+      ),
+      row(
+        'bloody_urine',
+        t('triage.bloodyUrine'),
+        formatTriAnswer(answered.has('bloody_urine'), form.dark_or_bloody_urine, t, dash),
+      ),
+      row(
+        'bleeding',
+        t('triage.bleedingSigns'),
+        formatTriAnswer(answered.has('bleeding'), form.bleeding_nose_gums_skin_or_vomit_blood, t, dash),
+      ),
+      row(
+        'hemoglobin',
+        t('triage.hemoglobin'),
+        !answered.has('hemoglobin')
+          ? dash
+          : form.hemoglobin_g_dl != null
+            ? `${form.hemoglobin_g_dl} g/dL`
+            : t('triage.skipped'),
+      ),
+      row('tdr', t('triage.tdr'), answered.has('tdr') ? t(`triage.${form.tdr_result}`) : dash),
     ];
   }, [answered, dash, form, t]);
 
   const stepperItems = STEPS.map((s) => ({ id: s, label: stepLabel(s, t) }));
 
-  const voiceBar = phraseId ? (
-    <VoiceControls
-      phraseIds={[phraseId]}
-      helpPhraseId={helpId}
-      showLabels={desktop}
-      onTranscriptConfirmed={({ intents }) => applyVoiceIntents(intents)}
-    />
-  ) : null;
-
   const iconFor = (s: Step) => {
     const danger: Step[] = ['convulsions', 'unable_to_drink', 'vomiting_everything', 'lethargy', 'breathing'];
+    const blood: Step[] = [...BLOOD_TRI_STEPS, 'hemoglobin'];
     const tone = danger.includes(s)
       ? 'danger'
-      : s === 'temperature' || s === 'feverDays'
+      : blood.includes(s)
         ? 'amber'
-        : s === 'tdr'
-          ? 'teal'
-          : 'ocean';
-    return <Orb size={52} tone={tone} delay={STEPS.indexOf(s)} />;
+        : s === 'temperature' || s === 'feverDays'
+          ? 'amber'
+          : s === 'tdr'
+            ? 'teal'
+            : 'ocean';
+    const speaking = voice.state === 'speaking';
+    return (
+      <span
+        className={cn('relative inline-flex', speaking && 'scale-110 transition-transform')}
+        aria-hidden
+      >
+        <Orb size={52} tone={tone} delay={STEPS.indexOf(s)} />
+        {speaking ? (
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white shadow">
+            <Volume2 className="h-3 w-3" />
+          </span>
+        ) : null}
+      </span>
+    );
   };
 
   const selectionFlash = (
@@ -729,7 +980,6 @@ export function TriagePage() {
 
   const questionBody = (
     <>
-      {voiceBar}
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {stepLabel(step, t)}
       </div>
@@ -752,7 +1002,29 @@ export function TriagePage() {
               data-testid={`triage-step-${step}`}
             >
               {selectionFlash}
-              <div className="mb-4">{iconFor(step)}</div>
+              <div className="mb-4 flex items-center gap-3">
+                {iconFor(step)}
+                {phraseId ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="gap-2"
+                    data-testid="triage-read-question"
+                    disabled={voice.state === 'speaking'}
+                    onClick={() => {
+                      void speakStep(step, false);
+                    }}
+                  >
+                    <Volume2 className="h-4 w-4" aria-hidden />
+                    {voice.state === 'speaking' ? t('triage.readingQuestion') : t('triage.readThisQuestion')}
+                  </Button>
+                ) : null}
+                {voice.state === 'speaking' ? (
+                  <Button type="button" size="sm" variant="secondary" onClick={() => voice.stop()}>
+                    {t('voice.tooltipStop')}
+                  </Button>
+                ) : null}
+              </div>
 
               {step === 'age' && (
                 <>
@@ -995,6 +1267,71 @@ export function TriagePage() {
                 </>
               )}
 
+              {(BLOOD_TRI_STEPS as readonly string[]).includes(step) && (
+                <>
+                  {step === 'pale_palms' ? (
+                    <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                      {t('triage.bloodGroupTitle')}
+                    </p>
+                  ) : null}
+                  <p className="mt-1 text-xl font-semibold">{stepLabel(step, t)}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{t('triage.bloodValidationNotice')}</p>
+                  <YesNoUnknownCards
+                    desktop={desktop}
+                    value={
+                      answered.has(step)
+                        ? (form[BLOOD_STEP_FIELD[step as BloodTriStep]] as YesNoUnknownAnswer)
+                        : null
+                    }
+                    disabled={locked}
+                    onChange={(v) =>
+                      selectChoice(
+                        step,
+                        { [BLOOD_STEP_FIELD[step as BloodTriStep]]: v } as Partial<TriageInput>,
+                        v,
+                      )
+                    }
+                    yesLabel={t('triage.yes')}
+                    noLabel={t('triage.no')}
+                    unknownLabel={t('common.unknown')}
+                  />
+                </>
+              )}
+
+              {step === 'hemoglobin' && (
+                <>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                    {t('triage.bloodGroupTitle')}
+                  </p>
+                  <p className="mt-1 text-xl font-semibold">{t('triage.hemoglobin')}</p>
+                  <p className="mt-1 text-sm text-ink-muted">{t('triage.hemoglobinHint')}</p>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={25}
+                    step={0.1}
+                    className="mt-4 text-2xl"
+                    placeholder={t('triage.hemoglobinPlaceholder')}
+                    value={form.hemoglobin_g_dl ?? ''}
+                    disabled={locked}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      bumpStepper('hemoglobin', {
+                        hemoglobin_g_dl: raw === '' ? null : Number(raw),
+                      });
+                    }}
+                  />
+                  <Button
+                    className="mt-3 w-full"
+                    variant="secondary"
+                    disabled={locked}
+                    onClick={() => selectChoice('hemoglobin', { hemoglobin_g_dl: null }, 'skip')}
+                  >
+                    {t('triage.skipHemoglobin')}
+                  </Button>
+                </>
+              )}
+
               {step === 'tdr' && (
                 <>
                   <p className="text-xl font-semibold">{t('triage.tdr')}</p>
@@ -1068,11 +1405,14 @@ export function TriagePage() {
           variant="secondary"
           className="flex-1"
           disabled={locked}
-          onClick={() =>
-            stepIndex === 0
-              ? navigate(location.pathname.startsWith('/app') ? '/app/home' : '/m/home')
-              : setStepIndex((i) => i - 1)
-          }
+          onClick={() => {
+            voice.stop();
+            if (stepIndex === 0) {
+              navigate(location.pathname.startsWith('/app') ? '/app/home' : '/m/home');
+            } else {
+              setStepIndex((i) => i - 1);
+            }
+          }}
         >
           {t('common.back')}
         </Button>
@@ -1099,17 +1439,67 @@ export function TriagePage() {
   ) : null;
 
   const summaryPanel = (
-    <Card className="p-4">
+    <Card className="p-4" data-testid="answers-so-far">
       <h3 className="text-sm font-semibold">{t('triage.liveSummary')}</h3>
-      <ul className="mt-2 space-y-1 text-xs">
-        {summaryRows.map((row) => (
-          <li key={row.label} className="flex justify-between gap-2">
-            <span className="text-ink-muted">{row.label}</span>
-            <span className="font-semibold">{row.value}</span>
-          </li>
-        ))}
+      {!onlineEnrichment ? (
+        <p className="mt-1 text-[11px] text-ink-muted">{t('ai.insightsOffline')}</p>
+      ) : null}
+      <ul className="mt-2 space-y-2 text-xs">
+        {summaryRows.map((row) => {
+          const insight = insightMap[row.field];
+          const answeredRow = row.value !== dash;
+          return (
+            <li key={row.field} data-testid={`summary-row-${row.field}`}>
+              <div className="flex justify-between gap-2">
+                <span className="text-ink-muted">{row.label}</span>
+                <span className="font-semibold">{row.value}</span>
+              </div>
+              {answeredRow && insight ? (
+                <div className="mt-0.5 flex flex-wrap items-start gap-1" data-testid={`insight-${row.field}`}>
+                  <Badge
+                    tone={
+                      insight.source === 'rule' ? 'primary' : insight.source === 'ml' ? 'info' : 'accent'
+                    }
+                  >
+                    {insight.source === 'rule'
+                      ? t('ai.provenanceRule')
+                      : insight.source === 'ml'
+                        ? t('ai.provenanceMl')
+                        : t('ai.provenanceAi')}
+                  </Badge>
+                  <span className="text-[11px] leading-snug text-ink-muted">{insight.text}</span>
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
+      {insightWarnings.length ? (
+        <ul className="mt-3 space-y-2" data-testid="consistency-warnings">
+          {insightWarnings.map((w) => (
+            <li
+              key={w.id}
+              className="rounded-control border border-warning/40 bg-warning-soft px-2 py-1.5 text-[11px] text-warning"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span>{w.text}</span>
+                <button
+                  type="button"
+                  className="shrink-0 font-semibold underline"
+                  onClick={() => dismissWarning(w.id)}
+                >
+                  {t('triage.dismissWarning')}
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Card>
+  );
+
+  const resultModal = (
+    <ResultModal open={resultOpen} onClose={closeResultModal} triagePath={triageBase} />
   );
 
   const progressBar = (
@@ -1126,32 +1516,21 @@ export function TriagePage() {
     </div>
   );
 
-  if (desktop) {
-    return (
-      <WebShell title={t('triage.title')} crumbs={[t('nav.home'), t('triage.title')]}>
-        <div className="relative mx-auto max-w-[1440px] pb-4">
-          {progressBar}
-          <StepperLayout
-            steps={stepperItems}
-            currentId={step}
-            question={questionBody}
-            help={helpPanel}
-            summary={summaryPanel}
-          />
-          <ConversationBar onStart={runGuidedTriage} />
-        </div>
-      </WebShell>
-    );
-  }
-
   return (
-    <ChwShell title={t('triage.title')}>
-      <div className="relative pb-4">
+    <WebShell title={t('triage.title')} crumbs={[t('nav.home'), t('triage.title')]}>
+      <div className="relative mx-auto max-w-[1440px] pb-4">
         {progressBar}
-        {questionBody}
-        <ConversationBar onStart={runGuidedTriage} />
+        <TriageReadAloudBar className="mb-3" prefs={readAloudPrefs} onPrefsChange={setReadAloudPrefs} />
+        <StepperLayout
+          steps={stepperItems}
+          currentId={step}
+          question={questionBody}
+          help={helpPanel}
+          summary={summaryPanel}
+        />
       </div>
-    </ChwShell>
+      {resultModal}
+    </WebShell>
   );
 }
 
@@ -1187,6 +1566,52 @@ function YesNoCards({
           {v === 'yes' ? yesLabel : noLabel}
           {desktop ? (
             <span className="mt-1 block text-xs font-normal text-ink-muted">{v === 'yes' ? 'Y' : 'N'}</span>
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function YesNoUnknownCards({
+  value,
+  onChange,
+  yesLabel,
+  noLabel,
+  unknownLabel,
+  desktop,
+  disabled,
+}: {
+  value: YesNoUnknownAnswer | null;
+  onChange: (v: YesNoUnknownAnswer) => void;
+  yesLabel: string;
+  noLabel: string;
+  unknownLabel: string;
+  desktop: boolean;
+  disabled?: boolean;
+}) {
+  const opts: { id: YesNoUnknownAnswer; label: string; hint: string }[] = [
+    { id: 'yes', label: yesLabel, hint: 'Y' },
+    { id: 'no', label: noLabel, hint: 'N' },
+    { id: 'unknown', label: unknownLabel, hint: 'U' },
+  ];
+  return (
+    <div className={cn('mt-4 grid grid-cols-3 gap-2', desktop && 'gap-3')}>
+      {opts.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          disabled={disabled}
+          className={cn(
+            'rounded-card border-2 font-semibold transition',
+            desktop ? 'min-h-[100px] text-base' : 'min-h-[72px] text-sm',
+            value === opt.id ? 'border-primary bg-primary-soft' : 'border-border bg-surface',
+          )}
+          onClick={() => onChange(opt.id)}
+        >
+          {opt.label}
+          {desktop ? (
+            <span className="mt-1 block text-xs font-normal text-ink-muted">{opt.hint}</span>
           ) : null}
         </button>
       ))}

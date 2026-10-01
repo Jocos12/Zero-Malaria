@@ -47,6 +47,15 @@ for (const [label, flat] of [
       failed = true;
       continue;
     }
+    if (value.includes('\u2014') || value.includes('\u2013')) {
+      console.error(`FAIL ${label}: ${key} contains em/en dash; use words instead`);
+      failed = true;
+    }
+    // Lone "-" used as empty UI placeholder (not part of a sentence)
+    if (value.trim() === '-') {
+      console.error(`FAIL ${label}: ${key} is a lone dash placeholder; use a translated label`);
+      failed = true;
+    }
     if (value.includes('TODO_REVIEW_RW')) {
       console.error(`FAIL ${label}: ${key} contains TODO_REVIEW_RW`);
       failed = true;

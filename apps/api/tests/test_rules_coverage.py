@@ -67,6 +67,40 @@ def test_each_danger_sign_urgent(field):
     assert r.protocol_reference
 
 
+def test_blood_signs_yes_do_not_escalate_when_disabled():
+    """Blood yes answers are stored for nurse inform; escalation stays off in placeholder config."""
+    r = run(
+        base(
+            pale_palms_or_eyelids="yes",
+            blood_in_stool="yes",
+            dark_or_bloody_urine="yes",
+            bleeding_nose_gums_skin_or_vomit_blood="yes",
+        ),
+        answered=[
+            *ALL_ANSWERED,
+            "pale_palms_or_eyelids",
+            "blood_in_stool",
+            "dark_or_bloody_urine",
+            "bleeding_nose_gums_skin_or_vomit_blood",
+        ],
+    )
+    assert r.decision == "treat_at_home"
+    assert "pale_palms_or_eyelids" in r.inform_nurse_fields
+    assert r.pending_blood_clinical_validation is True
+    assert "pale_palms_or_eyelids" not in r.triggered_rules
+
+
+def test_convulsions_still_urgent_with_blood_yes():
+    r = run(
+        base(convulsions=1, pale_palms_or_eyelids="yes"),
+        answered=[*ALL_ANSWERED, "pale_palms_or_eyelids"],
+    )
+    assert r.decision == "urgent_refer"
+    assert "convulsions" in r.triggered_rules or any(
+        d.field == "convulsions" for d in r.reason_details
+    )
+
+
 def test_all_danger_signs_urgent():
     r = run(
         base(

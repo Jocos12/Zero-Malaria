@@ -1,13 +1,13 @@
 {
-  "title": "Ibaruwa zo ku kigo nderabuzima",
-  "markReceived": "Byakiriwe",
-  "markArrived": "Yageze",
-  "markTreated": "Yavuwe",
-  "notArrived": "Ntaragera",
-  "empty": "Nta baruwa zinjira.",
-  "newCount": "Nshya",
-  "urgentCount": "Byihutirwa",
-  "selectPrompt": "Hitamo ibaruwa kugira ngo usuzume kandi uhindure uko bimeze.",
-  "updated": "Byahinduwe",
-  "updateStatus": "Hindura uko bimeze"
+ "title": "Ibaruwa zo ku kigo nderabuzima",
+ "markReceived": "Byakiriwe",
+ "markArrived": "Yageze",
+ "markTreated": "Yavuwe",
+ "notArrived": "Ntaragera",
+ "empty": "Nta baruwa zinjira.",
+ "newCount": "Nshya",
+ "urgentCount": "Byihutirwa",
+ "selectPrompt": "Hitamo ibaruwa kugira ngo usuzume kandi uhindure uko bimeze.",
+ "updated": "Byahinduwe",
+ "updateStatus": "Hindura uko bimeze"
 }

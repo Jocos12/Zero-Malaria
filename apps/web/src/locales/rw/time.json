@@ -1,6 +1,6 @@
 {
-  "justNow": "ubu nyine",
-  "minutesAgo": "hashize iminota {{count}}",
-  "hoursAgo": "hashize amasaha {{count}}",
-  "daysAgo": "hashize iminsi {{count}}"
+ "justNow": "ubu nyine",
+ "minutesAgo": "hashize iminota {{count}}",
+ "hoursAgo": "hashize amasaha {{count}}",
+ "daysAgo": "hashize iminsi {{count}}"
 }

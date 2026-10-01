@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { AssistantChat, AssistantFab } from './components/ai/AssistantChat';
+import { readOpenCase, useAssistantPageContext } from './hooks/useAssistantPageContext';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import {
   ALL_ROLES,
@@ -10,7 +12,6 @@ import {
 } from './auth/roleAccess';
 
 import { RequireAuth, RequireRole } from './auth/guards';
-import { ViewportShellSync } from './auth/ViewportShellSync';
 import { SyncProvider } from './sync/SyncContext';
 import { EventProvider } from './events/EventContext';
 import { DemoBoardGate } from './auth/DemoBoardGate';
@@ -21,14 +22,10 @@ import { ToastProvider } from './components/ToastProvider';
 import { Skeleton } from './components/ui';
 import { LoginPage } from './pages/LoginPage';
 import { AuthLayout } from './pages/auth/AuthLayout';
-import { HomePage } from './pages/HomePage';
 import { TriagePage } from './pages/TriagePage';
-import { ResultPage } from './pages/ResultPage';
-import { HandoverPage } from './pages/HandoverPage';
 import { ReferralsPage } from './pages/ReferralsPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { FacilityPage } from './pages/FacilityPage';
-import { MobileLandingPage } from './pages/MobileLandingPage';
 import { NotAuthorizedPage } from './pages/NotAuthorizedPage';
 import { UsersPage } from './pages/UsersPage';
 import { PermissionsPage } from './pages/PermissionsPage';
@@ -42,7 +39,6 @@ import { AboutPage } from './pages/AboutPage';
 import { AppLanguagePage } from './pages/AppLanguagePage';
 import { PatientsPage } from './pages/PatientsPage';
 import { SuppliesPage } from './pages/SuppliesPage';
-import { PreventionPage } from './pages/PreventionPage';
 import { VoiceSettingsPage } from './pages/VoiceSettingsPage';
 import { LanguagePage } from './pages/LanguagePage';
 import { ChwWebHome } from './pages/ChwWebHome';
@@ -112,6 +108,63 @@ function LegacyRedirect({ to }: { to: string }) {
   return <Navigate to={`${to}${location.search}`} replace />;
 }
 
+function MobileToAppRedirect() {
+  const location = useLocation();
+  const path = location.pathname.replace(/\/$/, '') || '/m';
+  const map: Record<string, string> = {
+    '/m': '/app/home',
+    '/m/home': '/app/home',
+    '/m/triage': '/app/triage',
+    '/m/result': '/app/triage?result=open',
+    '/m/handover': '/app/triage?result=open',
+    '/m/referrals': '/app/my-referrals',
+    '/m/alerts': '/app/alerts',
+    '/m/prevention': '/app/home',
+    '/m/voice-settings': '/app/settings/voice',
+  };
+  const dest = map[path] || '/app/home';
+  const [toPath, toSearch] = dest.includes('?') ? dest.split('?') : [dest, ''];
+  const search = toSearch ? `?${toSearch}` : location.search;
+  return <Navigate to={`${toPath}${search}`} replace />;
+}
+
+function AssistantHost() {
+  const location = useLocation();
+  const [open, setOpen] = useState(false);
+  const { hasCase, pageId, contextMode, resultOpen } = useAssistantPageContext();
+  const [savedCase, setSavedCase] = useState(() => readOpenCase());
+  const path = location.pathname;
+  useEffect(() => {
+    setSavedCase(readOpenCase());
+  }, [location.pathname, location.search]);
+  useEffect(() => {
+    if (!path.startsWith('/app')) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        if (!resultOpen) setOpen((v) => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [path, resultOpen]);
+  if (!path.startsWith('/app')) return null;
+  return (
+    <>
+      {!resultOpen ? <AssistantFab onOpen={() => setOpen(true)} /> : null}
+      <AssistantChat
+        open={open && !resultOpen}
+        onClose={() => setOpen(false)}
+        caseInput={savedCase?.input}
+        caseResult={savedCase?.result}
+        hasCaseAvailable={hasCase}
+        pageId={pageId}
+        contextMode={contextMode}
+      />
+    </>
+  );
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -127,7 +180,6 @@ export default function App() {
                   v7_relativeSplatPath: true,
                 }}
               >
-              <ViewportShellSync />
               <PasswordPromptModal />
               <Routes>
                 <Route path="/" element={<PublicLanding />} />
@@ -136,15 +188,8 @@ export default function App() {
                 </Route>
                 <Route path="/dev/translations" element={<DevTranslationsPage />} />
 
-                <Route path="/m" element={<MobileLandingPage />} />
-                <Route path="/m/home" element={<HomePage />} />
-                <Route path="/m/triage" element={<TriagePage />} />
-                <Route path="/m/result" element={<ResultPage />} />
-                <Route path="/m/handover" element={<HandoverPage />} />
-                <Route path="/m/referrals" element={<ReferralsPage />} />
-                <Route path="/m/alerts" element={<AlertsPage />} />
-                <Route path="/m/prevention" element={<PreventionPage />} />
-                <Route path="/m/voice-settings" element={<VoiceSettingsPage />} />
+                <Route path="/m" element={<MobileToAppRedirect />} />
+                <Route path="/m/*" element={<MobileToAppRedirect />} />
 
                 <Route
                   path="/app"
@@ -351,7 +396,7 @@ export default function App() {
                   element={
                     <RequireAuth>
                       <RequireRole roles={['CHW']}>
-                        <ResultPage />
+                        <Navigate to="/app/triage?result=open" replace />
                       </RequireRole>
                     </RequireAuth>
                   }
@@ -401,12 +446,12 @@ export default function App() {
                   }
                 />
 
-                <Route path="/home" element={<LegacyRedirect to="/m/home" />} />
-                <Route path="/triage" element={<LegacyRedirect to="/m/triage" />} />
-                <Route path="/result" element={<LegacyRedirect to="/m/result" />} />
-                <Route path="/handover" element={<LegacyRedirect to="/m/handover" />} />
-                <Route path="/referrals" element={<LegacyRedirect to="/m/referrals" />} />
-                <Route path="/alerts" element={<LegacyRedirect to="/m/alerts" />} />
+                <Route path="/home" element={<LegacyRedirect to="/app/home" />} />
+                <Route path="/triage" element={<LegacyRedirect to="/app/triage" />} />
+                <Route path="/result" element={<Navigate to="/app/triage?result=open" replace />} />
+                <Route path="/handover" element={<LegacyRedirect to="/app/triage" />} />
+                <Route path="/referrals" element={<LegacyRedirect to="/app/my-referrals" />} />
+                <Route path="/alerts" element={<LegacyRedirect to="/app/alerts" />} />
                 <Route path="/facility" element={<FacilityPage />} />
                 <Route path="/rbc" element={<LegacyRedirect to="/app" />} />
                 <Route path="/lang" element={<LanguagePage />} />
@@ -414,6 +459,7 @@ export default function App() {
 
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
+              <AssistantHost />
             </BrowserRouter>
               </EventProvider>
           </ToastProvider>

@@ -1,8 +1,8 @@
 {
-  "urgent": "URGENT",
-  "refer": "REFER",
-  "treat": "TREAT",
-  "online": "Online",
-  "offline": "Offline",
-  "syncing": "Syncing"
+ "urgent": "URGENT",
+ "refer": "REFER",
+ "treat": "TREAT",
+ "online": "Online",
+ "offline": "Offline",
+ "syncing": "Syncing"
 }

@@ -281,6 +281,32 @@ class AppEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
+class ActivityCount(Base):
+    __tablename__ = "activity_counts"
+    __table_args__ = (
+        UniqueConstraint("chw_id", "facility_id", "date", "source", name="uq_activity_chw_fac_date_src"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_uuid: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    chw_id: Mapped[str] = mapped_column(String(32), index=True)
+    facility_id: Mapped[str] = mapped_column(String(32), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)
+    patients_seen: Mapped[int] = mapped_column(Integer, default=0)
+    patients_treated: Mapped[int] = mapped_column(Integer, default=0)
+    rdt_done: Mapped[int] = mapped_column(Integer, default=0)
+    rdt_positive: Mapped[int] = mapped_column(Integer, default=0)
+    referred: Mapped[int] = mapped_column(Integer, default=0)
+    source: Mapped[str] = mapped_column(String(16), default="manual", index=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    created_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    confirmed_by: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class FollowUp(Base):
     __tablename__ = "follow_ups"
 

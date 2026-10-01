@@ -20,6 +20,7 @@ const OFFLINE_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type SessionPayload = {
   access_token: string;
+  refresh_token?: string;
   user: AuthUser;
   offline_until?: number;
 };
@@ -87,8 +88,18 @@ function applyLoginResponse(data: LoginResponse): AuthUser {
     ...data.user,
     password_prompt_status: data.password_prompt_status || data.user.password_prompt_status,
   });
+  const prevRefresh = (() => {
+    try {
+      const raw = sessionStorage.getItem(SESSION_KEY);
+      if (!raw) return data.refresh_token;
+      return (JSON.parse(raw) as SessionPayload).refresh_token || data.refresh_token;
+    } catch {
+      return data.refresh_token;
+    }
+  })();
   const session: SessionPayload = {
     access_token: data.access_token,
+    refresh_token: data.refresh_token || prevRefresh,
     user,
     offline_until: Date.now() + OFFLINE_GRACE_MS,
   };
@@ -135,7 +146,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const me = normalizeUser(await api.me());
         setUser(me);
-        writeSession({ access_token: s.access_token, user: me, offline_until: s.offline_until });
+        writeSession({
+          access_token: s.access_token,
+          refresh_token: s.refresh_token,
+          user: me,
+          offline_until: s.offline_until,
+        });
         setToken(s.access_token);
       } catch {
         writeSession(null);
