@@ -45,6 +45,28 @@ def _assert_timestamp_order(row: Referral) -> None:
         assert t_arr is not None and t_arr < t_treat
 
 
+def test_ensure_demo_users_on_empty_db(tmp_path):
+    db_file = tmp_path / "empty.db"
+    configure_engine(f"sqlite:///{db_file}")
+    from app import db as db_module
+    from app.auth import verify_password
+
+    Base.metadata.drop_all(bind=db_module.engine)
+    init_db()
+    db = SessionLocal()
+    try:
+        created = seed_module.ensure_demo_users(db)
+        db.commit()
+        assert created == len(seed_module.DEMO_ACCOUNTS)
+        admin = db.query(User).filter(User.username == "super.admin").one()
+        assert admin.role == "SUPER_ADMIN"
+        assert admin.active is True
+        assert verify_password(settings.demo_password, admin.password_hash)
+        assert seed_module.ensure_demo_users(db) == 0
+    finally:
+        db.close()
+
+
 def test_referral_timestamps_ordering(seeded_db):
     for row in seeded_db.query(Referral).all():
         _assert_timestamp_order(row)

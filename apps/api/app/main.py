@@ -157,6 +157,19 @@ def on_startup() -> None:
                 "Refusing to start: ZM_DEMO_MODE=false but ZM_DEMO_PASSWORD is still a demo default."
             )
     init_db()
+    if settings.demo_mode:
+        try:
+            from app.seed import ensure_demo_users
+
+            db = SessionLocal()
+            try:
+                created = ensure_demo_users(db)
+                db.commit()
+                print(f"[startup] demo users ready (created={created})")
+            finally:
+                db.close()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[startup] demo user seed error: {exc}")
     # FastAPI may keep included routers as _IncludedRouter (no flat .path); use OpenAPI.
     try:
         ai_paths = sorted(p for p in app.openapi().get("paths", {}) if p.startswith("/ai/"))
