@@ -100,38 +100,28 @@ def _local_turn(agent: str, snap: dict[str, Any], language: str) -> str:
 
 
 def _speak(agent: str, snap: dict[str, Any], language: str) -> tuple[str, str, int, bool]:
-    """Returns text, provider, latency_ms, used_fallback."""
-    prefs = AGENT_PROVIDER_PREF[agent]
-    providers = _provider_map()
-    reasons: list[str] = []
-    start_all = time.time()
-    for name in prefs:
-        if time.time() - start_all > TURN_TIMEOUT_S:
-            break
-        prov = providers[name]
-        t0 = time.time()
-        try:
-            if name == "local":
-                text = _local_turn(agent, snap, language)
-            else:
-                # Live providers raise without keys → fallback
-                prov.complete(
-                    "explain",
-                    {
-                        "decision": snap.get("decision"),
-                        "reasons": snap.get("top_factors") or [],
-                        "language": language,
-                    },
-                )
-                text = _local_turn(agent, snap, language)
-            latency = int((time.time() - t0) * 1000)
-            fallback = bool(reasons)
-            return text, name if name == "local" or not reasons else "local", latency, fallback
-        except Exception as exc:  # noqa: BLE001
-            reasons.append(f"{name}:{exc}")
-            continue
-    text = _local_turn(agent, snap, language)
-    return text, "local", int((time.time() - start_all) * 1000), True
+    """Returns text, provider, latency_ms, used_fallback — via cascade orchestrator."""
+    from app.services.ai.orchestrator import orchestrate_chat
+
+    role = {
+        "triage": "As Triage Agent, explain urgency signals for this case.",
+        "guideline": "As Guideline Agent, cite protocol sections that apply.",
+        "referral": "As Referral Agent, say what to do for transport/handover now.",
+    }.get(agent, "Explain this case briefly.")
+    out = orchestrate_chat(
+        role,
+        history=[],
+        case=snap,
+        language=language,
+        task="consult",
+        use_case_context=True,
+    )
+    return (
+        str(out.get("text") or _local_turn(agent, snap, language)),
+        str(out.get("provider_used") or "local"),
+        int(out.get("latency_ms") or 0),
+        bool(out.get("fallback_reason") or out.get("local_mode")),
+    )
 
 
 def _final_answer(snap: dict[str, Any], language: str) -> str:
@@ -190,7 +180,7 @@ def run_consult(
             if time.time() - t0 > TOTAL_TIMEOUT_S:
                 break
             text, provider, latency, fallback = _speak(agent, snap, lang)
-            text, rejected = guard_agent_text(text, locked, lang)
+            text, rejected, _reason = guard_agent_text(text, locked, lang)
             if rejected:
                 rejected_count += 1
             turns.append(
@@ -220,7 +210,7 @@ def run_consult(
         if turn_n >= MAX_TURNS or time.time() - t0 > TOTAL_TIMEOUT_S:
             break
 
-    final, fin_rejected = guard_agent_text(_final_answer(snap, lang), locked, lang)
+    final, fin_rejected, _reason = guard_agent_text(_final_answer(snap, lang), locked, lang)
     if fin_rejected:
         rejected_count += 1
     total_ms = int((time.time() - t0) * 1000)

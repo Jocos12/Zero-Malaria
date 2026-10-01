@@ -1,9 +1,9 @@
 {
-  "title": "Voice phrase review",
-  "subtitle": "Play each phrase and mark when a native speaker has reviewed it.",
-  "play": "Play",
-  "markReviewed": "Reviewed",
-  "reviewed": "Reviewed",
-  "pending": "Needs review",
-  "open": "Open phrase review"
+ "title": "Voice phrase review",
+ "subtitle": "Play each phrase and mark when a native speaker has reviewed it.",
+ "play": "Play",
+ "markReviewed": "Reviewed",
+ "reviewed": "Reviewed",
+ "pending": "Needs review",
+ "open": "Open phrase review"
 }

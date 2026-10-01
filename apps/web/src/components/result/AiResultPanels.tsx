@@ -4,9 +4,48 @@ import { useTranslation } from 'react-i18next';
 import { api } from '../../api/client';
 import { Badge, Button, Card } from '../ui';
 import { mlEscalateThreshold } from '../../lib/decisionGuard';
-import type { DecisionResult, TriageInput } from '../../types';
+import type { AiTrace, DecisionResult, TriageInput } from '../../types';
 import { VoiceControls } from '../voice/VoiceControls';
 import { cn } from '../../lib/cn';
+
+const FACTOR_I18N: Record<string, { rw: string; en: string }> = {
+  lethargy: { rw: 'Gucika intege / ntabona', en: 'Lethargy or unconsciousness' },
+  unable_to_drink: { rw: 'Ntashobora kunywa', en: 'Unable to drink or feed' },
+  vomiting_everything: { rw: 'Kuraruka byose', en: 'Vomiting everything' },
+  convulsions: { rw: 'Gusetsa', en: 'Convulsions' },
+  severe_breathing_difficulty: { rw: "Agorwa n'uruhuha", en: 'Severe breathing difficulty' },
+  fever_days: { rw: "Iminsi y'ubushyuhe", en: 'Fever days' },
+  temperature_c: { rw: 'Ubushyuhe', en: 'Temperature' },
+  age_months: { rw: 'Imyaka (amezi)', en: 'Age (months)' },
+};
+
+function localizeFactor(raw: string, lang: string): string {
+  const cleaned = raw
+    .replace(/\s*\(synthetic\)/gi, '')
+    .replace(/\bincreases risk\b/gi, '')
+    .replace(/\bdecreases risk\b/gi, '')
+    .trim();
+  const low = cleaned.toLowerCase().replace(/\s+/g, '_');
+  const rw = lang.startsWith('rw');
+  for (const [key, pack] of Object.entries(FACTOR_I18N)) {
+    if (low.includes(key) || cleaned.toLowerCase().includes(pack.en.toLowerCase())) {
+      return rw ? pack.rw : pack.en;
+    }
+  }
+  return cleaned.replace(/_/g, ' ');
+}
+
+/** Prefer ai_trace.ml.top_factors; never surface "decreases risk" for No answers. */
+export function mlFactorLabels(result: DecisionResult, trace?: AiTrace | null, language = 'en'): string[] {
+  const fromTrace = (trace?.ml?.top_factors || result.ai_trace?.ml?.top_factors || [])
+    .map((f) => localizeFactor(f.label, language))
+    .filter(Boolean);
+  if (fromTrace.length) return fromTrace.slice(0, 3);
+  return (result.shap_factors || [])
+    .slice(0, 3)
+    .map((f) => localizeFactor(f, language))
+    .filter(Boolean);
+}
 
 export type AiMode = 'rules' | 'rules_ai';
 
@@ -18,23 +57,9 @@ type ProviderInfo = {
 
 function ProvBadge({ info, t }: { info: ProviderInfo | null; t: (k: string) => string }) {
   if (!info?.provider_used) return null;
-  const label =
-    info.provider_used === 'local'
-      ? t('ai.localRules')
-      : info.provider_used.charAt(0).toUpperCase() + info.provider_used.slice(1);
   return (
     <span className="inline-flex flex-wrap items-center gap-1 text-[11px] text-ink-muted">
-      <Badge tone="info">{label}</Badge>
-      {typeof info.latency_ms === 'number' ? (
-        <span>
-          {t('ai.latency')}: {info.latency_ms}ms
-        </span>
-      ) : null}
-      {info.fallback_reason ? (
-        <span>
-          {t('ai.fallback')}: {info.fallback_reason}
-        </span>
-      ) : null}
+      <Badge tone="info">{t('ai.assistantStatus')}</Badge>
     </span>
   );
 }
@@ -65,48 +90,117 @@ export function AiInsightsCard({
   mode,
   summary,
   summaryMeta,
+  summaryLoading = false,
+  scoreState,
+  onCopySummary,
+  onAttachSummary,
+  summaryAttached = false,
+  advisory = null,
 }: {
   online: boolean;
   result: DecisionResult;
   mode: AiMode;
   summary: string | null;
   summaryMeta: ProviderInfo | null;
+  summaryLoading?: boolean;
+  /** Explicit gauge state override: loading | available | unavailable */
+  scoreState?: 'loading' | 'available' | 'unavailable';
+  onCopySummary?: () => void;
+  onAttachSummary?: () => void;
+  summaryAttached?: boolean;
+  advisory?: {
+    explanation_en?: string;
+    explanation_rw?: string;
+    suggested_escalation?: boolean;
+    handover_summary?: string;
+  } | null;
 }) {
   const { t } = useTranslation();
   const score = result.severe_risk;
   const pct = score != null ? Math.round(Math.min(1, Math.max(0, score)) * 100) : null;
-  const factors = (result.shap_factors || []).slice(0, 3);
+  const factors = mlFactorLabels(result, result.ai_trace);
 
-  if (!online) {
+  const gauge: 'loading' | 'available' | 'unavailable' =
+    scoreState ||
+    (!online
+      ? 'unavailable'
+      : summaryLoading && score == null
+        ? 'loading'
+        : score != null
+          ? 'available'
+          : 'unavailable');
+
+  const fb = String(summaryMeta?.fallback_reason || '');
+  const unavailableReason = !online
+    ? t('ai.scoreUnavailableOffline')
+    : fb.includes('timeout')
+      ? t('ai.scoreUnavailableTimeout')
+      : fb.includes('429') || fb.includes('quota')
+        ? t('ai.scoreUnavailableQuota')
+        : fb.includes('404') || fb.includes('not found')
+          ? t('ai.scoreUnavailableRoute')
+          : fb.includes('not configured') || !summaryMeta?.provider_used || summaryMeta.provider_used === 'none'
+            ? t('ai.scoreUnavailableNoKey')
+            : t('ai.summaryUnavailable');
+  const providerTooltip = [
+    summaryMeta?.provider_used || 'none',
+    typeof summaryMeta?.latency_ms === 'number' ? `${summaryMeta.latency_ms}ms` : null,
+    summaryMeta?.fallback_reason || unavailableReason,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  if (mode === 'rules') {
     return (
       <Card className="mt-4" aria-label={t('ai.insightsTitle')}>
-        <p className="text-sm text-ink-muted">{t('ai.insightsOffline')}</p>
-        <p className="mt-2 text-[11px] text-ink-muted">{t('ai.syntheticMetrics')}</p>
+        <p className="text-sm text-ink-muted">{t('ai.modeRulesOnly')}</p>
       </Card>
     );
   }
 
-  if (mode === 'rules') return null;
-
   return (
-    <Card className="mt-4 border-2 border-info/30" aria-label={t('ai.insightsTitle')}>
+    <Card className="mt-4 border-2 border-info/30" aria-label={t('ai.insightsTitle')} data-testid="ai-insights-card">
       <div className="flex flex-wrap items-center gap-2">
         <Gauge className="h-5 w-5 text-info" aria-hidden />
         <h3 className="font-semibold">{t('ai.insightsTitle')}</h3>
         <ProvChips rule ml={Boolean(result.ml_escalated || score != null)} ai t={t} />
       </div>
       <p className="mt-1 text-[11px] text-ink-muted">{t('ai.syntheticMetrics')}</p>
-      <div className="mt-3">
+
+      <div className="mt-3" data-testid="risk-score-gauge" data-state={gauge}>
         <div className="mb-1 flex justify-between text-xs">
           <span>
             {t('ai.riskScore')} <ProvChips ml t={t} />
           </span>
-          <span className="font-mono">{pct != null ? `${pct}%` : '—'}</span>
+          {gauge === 'loading' ? (
+            <span className="font-mono text-ink-muted">{t('ai.scoreLoading')}</span>
+          ) : gauge === 'available' ? (
+            <span className="font-mono">{pct}%</span>
+          ) : (
+            <span className="text-ink-muted" title={providerTooltip}>
+              {unavailableReason}
+            </span>
+          )}
         </div>
-        <div className="h-2 overflow-hidden rounded-full bg-surface-muted" role="meter" aria-valuenow={pct ?? 0} aria-valuemin={0} aria-valuemax={100}>
-          <div className="h-full rounded-full bg-info transition-all" style={{ width: `${pct ?? 0}%` }} />
-        </div>
+        {gauge === 'loading' ? (
+          <div className="h-2 animate-pulse rounded-full bg-surface-muted" data-testid="risk-score-skeleton" />
+        ) : (
+          <div
+            className="h-2 overflow-hidden rounded-full bg-surface-muted"
+            role="meter"
+            aria-valuenow={gauge === 'available' ? (pct ?? 0) : 0}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={t('ai.riskScore')}
+          >
+            <div
+              className="h-full rounded-full bg-info transition-all"
+              style={{ width: `${gauge === 'available' ? pct ?? 0 : 0}%` }}
+            />
+          </div>
+        )}
       </div>
+
       {factors.length ? (
         <ul className="mt-3 space-y-1 text-sm">
           <li className="text-xs font-semibold uppercase text-ink-muted">
@@ -120,31 +214,58 @@ export function AiInsightsCard({
           ))}
         </ul>
       ) : null}
-      {summary ? (
-        <div className="mt-4 rounded-control bg-surface-muted p-3">
-          <p className="text-xs font-semibold uppercase text-ink-muted">
-            {t('ai.summaryTitle')} <ProvChips ai t={t} />
+
+      <div className="mt-4 rounded-control bg-surface-muted p-3">
+        <p className="text-xs font-semibold uppercase text-ink-muted">
+          {t('ai.summaryTitle')} <ProvChips ai t={t} />
+        </p>
+        {summaryLoading && !summary ? (
+          <div className="mt-2 h-16 animate-pulse rounded-control bg-surface" data-testid="summary-skeleton" />
+        ) : summary ? (
+          <>
+            <p className="mt-1 text-sm leading-relaxed">{summary}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge tone="warning">{t('ai.summaryLabel')}</Badge>
+              <Badge tone="warning">{t('ai.needsNativeReview')}</Badge>
+              {onCopySummary ? (
+                <Button size="sm" variant="outline" onClick={onCopySummary}>
+                  {t('ai.copySummary')}
+                </Button>
+              ) : null}
+              {onAttachSummary ? (
+                <Button size="sm" variant="secondary" onClick={onAttachSummary} disabled={summaryAttached}>
+                  {summaryAttached ? t('ai.summaryAttached') : t('ai.attachSummary')}
+                </Button>
+              ) : null}
+            </div>
+            <div className="mt-2">
+              <ProvBadge info={summaryMeta} t={t} />
+            </div>
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-ink-muted">
+            {!online ? t('ai.insightsOffline') : t('ai.summaryUnavailable')}
           </p>
-          <p className="mt-1 text-sm leading-relaxed">{summary}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Badge tone="warning">{t('ai.summaryLabel')}</Badge>
-            <Badge tone="warning">{t('ai.needsNativeReview')}</Badge>
-          </div>
-          <div className="mt-2">
-            <ProvBadge info={summaryMeta} t={t} />
-          </div>
-        </div>
-      ) : null}
+        )}
+      </div>
+
       <div className="mt-3">
-        <p className="text-xs font-semibold text-ink-muted">{t('ai.aiAdded')}</p>
+        <p className="text-xs font-semibold text-ink-muted">{t('ai.problemAiAdded')}</p>
         <ul className="mt-1 list-disc pl-5 text-sm text-ink-muted">
-          {score != null ? <li>score={score.toFixed(2)}</li> : null}
+          {score != null ? (
+            <li>
+              {t('ai.riskScore')}: {score.toFixed(2)}
+            </li>
+          ) : null}
           {factors.map((f) => (
             <li key={`a-${f}`}>{f}</li>
           ))}
+          {result.ml_escalated ? <li>{t('ai.mlEscalateShort')}</li> : null}
+          {advisory?.suggested_escalation ? <li>{t('result.aiEscalateHint')}</li> : null}
+          {advisory?.handover_summary ? <li>{advisory.handover_summary.slice(0, 120)}</li> : null}
           {summary ? <li>{t('ai.summaryTitle')}</li> : null}
-          {result.ml_escalated ? <li>escalation</li> : null}
         </ul>
+        <p className="mt-2 text-[11px] text-ink-muted">{t('ai.syntheticMetrics')}</p>
       </div>
     </Card>
   );
@@ -154,7 +275,7 @@ export function MlEscalateBanner({ result }: { result: DecisionResult }) {
   const { t } = useTranslation();
   if (!result.ml_escalated) return null;
   const thr = mlEscalateThreshold();
-  const score = result.severe_risk != null ? result.severe_risk.toFixed(2) : '—';
+  const score = result.severe_risk != null ? result.severe_risk.toFixed(2) : '-';
   return (
     <div
       className="mt-3 rounded-card border border-warning/40 bg-warning-soft p-3 text-sm text-warning"
@@ -365,9 +486,10 @@ export function AiConsultPanel({
   }
 
   return (
-    <Card className="mt-4 border border-accent/30" aria-label={t('ai.consultTitle')}>
+    <div className="mt-1" aria-label={t('ai.consultTitle')} data-testid="ai-consult-panel">
       <Button
         className="w-full"
+        size="sm"
         variant="secondary"
         leftIcon={<Bot className="h-4 w-4" />}
         disabled={busy}
@@ -434,7 +556,7 @@ export function AiConsultPanel({
           </div>
         </div>
       ) : null}
-    </Card>
+    </div>
   );
 }
 
@@ -447,7 +569,7 @@ export function AiModeToggle({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="mt-3 flex rounded-full bg-surface-muted p-1 text-sm" role="group" aria-label="AI mode">
+    <div className="mt-0 flex rounded-full bg-surface-muted p-0.5 text-xs" role="group" aria-label={t('ai.modeRulesAi')}>
       <button
         type="button"
         className={cn(
@@ -455,6 +577,7 @@ export function AiModeToggle({
           mode === 'rules' ? 'bg-surface shadow-card text-ink' : 'text-ink-muted',
         )}
         onClick={() => onChange('rules')}
+        data-testid="ai-mode-rules"
       >
         {t('ai.modeRulesOnly')}
       </button>
@@ -465,6 +588,7 @@ export function AiModeToggle({
           mode === 'rules_ai' ? 'bg-surface shadow-card text-ink' : 'text-ink-muted',
         )}
         onClick={() => onChange('rules_ai')}
+        data-testid="ai-mode-rules-ai"
       >
         {t('ai.modeRulesAi')}
       </button>
@@ -481,10 +605,22 @@ export function useVisitSummary(
 ) {
   const [summary, setSummary] = useState<string | null>(null);
   const [meta, setMeta] = useState<ProviderInfo | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!online || !input || !result) return;
+    if (!online || !input || !result) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
+    setLoading(true);
+    // Allow cascade (Gemini→Groq→Local); keep UI skeleton until reply or soft timeout
+    const timer = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoading(false);
+        setMeta((m) => m || { provider_used: 'none', latency_ms: 20000, fallback_reason: 'timeout' });
+      }
+    }, 20000);
     void api
       .aiVisitSummary({
         answers: input as unknown as Record<string, unknown>,
@@ -499,6 +635,7 @@ export function useVisitSummary(
       })
       .then((res) => {
         if (cancelled) return;
+        window.clearTimeout(timer);
         const data = (res.data || {}) as { summary?: string };
         setSummary(data.summary || null);
         setMeta({
@@ -506,6 +643,7 @@ export function useVisitSummary(
           latency_ms: Number(res.latency_ms || 0),
           fallback_reason: res.fallback_reason ? String(res.fallback_reason) : null,
         });
+        setLoading(false);
         try {
           const raw = sessionStorage.getItem('zm_last_triage');
           if (!raw) return;
@@ -517,12 +655,18 @@ export function useVisitSummary(
         }
       })
       .catch(() => {
-        if (!cancelled) setSummary(null);
+        if (!cancelled) {
+          window.clearTimeout(timer);
+          setSummary(null);
+          setMeta({ provider_used: 'none', latency_ms: 0, fallback_reason: 'unavailable' });
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [online, input, result, language]);
 
-  return { summary, meta };
+  return { summary, meta, loading };
 }

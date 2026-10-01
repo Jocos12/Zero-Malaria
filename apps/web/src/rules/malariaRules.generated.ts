@@ -62,6 +62,61 @@ export const MALARIA_RULES = {
       "reason_rw": "Agorwa cyane n'uruhuha"
     }
   ],
+  "blood_related_signs": [
+    {
+      "id": "pale_palms_or_eyelids",
+      "field": "pale_palms_or_eyelids",
+      "when_true": "urgent_refer",
+      "status": "pending_clinical_validation",
+      "escalation_enabled": false,
+      "inform_nurse": true,
+      "protocol_section": "Blood-related sign - severe anaemia (PLACEHOLDER)",
+      "reason_en": "Pale palms or very pale inside eyelids reported",
+      "reason_rw": "Umutwe w'ibiganza cyangwa imbere y'ijisho byera cyane byavuzwe"
+    },
+    {
+      "id": "blood_in_stool",
+      "field": "blood_in_stool",
+      "when_true": "urgent_refer",
+      "status": "pending_clinical_validation",
+      "escalation_enabled": false,
+      "inform_nurse": true,
+      "protocol_section": "Blood-related sign - blood in stool (PLACEHOLDER)",
+      "reason_en": "Blood in stool reported",
+      "reason_rw": "Amaraso mu nda byavuzwe"
+    },
+    {
+      "id": "dark_or_bloody_urine",
+      "field": "dark_or_bloody_urine",
+      "when_true": "urgent_refer",
+      "status": "pending_clinical_validation",
+      "escalation_enabled": false,
+      "inform_nurse": true,
+      "protocol_section": "Blood-related sign - dark or bloody urine (PLACEHOLDER)",
+      "reason_en": "Dark or bloody urine reported",
+      "reason_rw": "Inkari yijimye cyangwa ifite amaraso byavuzwe"
+    },
+    {
+      "id": "bleeding_nose_gums_skin_or_vomit_blood",
+      "field": "bleeding_nose_gums_skin_or_vomit_blood",
+      "when_true": "urgent_refer",
+      "status": "pending_clinical_validation",
+      "escalation_enabled": false,
+      "inform_nurse": true,
+      "protocol_section": "Blood-related sign - bleeding (PLACEHOLDER)",
+      "reason_en": "Bleeding from nose, gums, skin, or blood in vomit reported",
+      "reason_rw": "Kuva amaraso mu zuru, mu kanwa, ku ruhu, cyangwa mu nda byavuzwe"
+    }
+  ],
+  "blood_optional_fields": [
+    {
+      "id": "hemoglobin_g_dl",
+      "field": "hemoglobin_g_dl",
+      "status": "pending_clinical_validation",
+      "escalation_enabled": false,
+      "protocol_section": "Optional hemoglobin (g/dL) - no automated threshold"
+    }
+  ],
   "rules": [
     {
       "id": "infant_age_referral",
@@ -142,6 +197,11 @@ export const MALARIA_RULES = {
     "vomiting_everything": "Vomiting everything",
     "lethargy": "Lethargy",
     "severe_breathing_difficulty": "Severe breathing difficulty",
+    "pale_palms_or_eyelids": "Pale palms or very pale inside eyelids",
+    "blood_in_stool": "Blood in stool",
+    "dark_or_bloody_urine": "Dark or bloody urine",
+    "bleeding_nose_gums_skin_or_vomit_blood": "Bleeding (nose, gums, skin, or vomit)",
+    "hemoglobin_g_dl": "Hemoglobin (g/dL)",
     "tdr_positive": "TDR positive",
     "tdr_negative": "TDR negative",
     "tdr_invalid": "TDR invalid",

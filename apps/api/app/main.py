@@ -16,7 +16,18 @@ from sqlalchemy.orm import Session
 
 from app.auth import assert_chw_own, get_current_user, require_roles, write_audit
 from app.config import settings
-from app.db import CaseRecord, Facility, FollowUp, Referral, SessionLocal, StockRecord, SyncEvent, User, get_db, init_db
+from app.db import (
+    CaseRecord,
+    Facility,
+    FollowUp,
+    Referral,
+    SessionLocal,
+    StockRecord,
+    SyncEvent,
+    User,
+    get_db,
+    init_db,
+)
 from app.nlp import extract_symptoms_mock
 from app.routers_ai import router as ai_router
 from app.routers_auth import router as auth_router
@@ -24,6 +35,7 @@ from app.routers_auth import users_router
 from app.routers_live import router as live_router
 from app.routers_rbac import router as rbac_router
 from app.routers_crud import router as crud_router
+from app.routers_activity_counts import router as activity_counts_router
 from app.roles import RBC_ADMIN, SUPER_ADMIN
 from app.services.live_events import append_referral_event
 from app.schemas import (
@@ -32,6 +44,7 @@ from app.schemas import (
     ReferralCreate,
     ReferralOut,
     StatusUpdate,
+    ActivityCountCreate,
     SyncRequest,
     SyncResponse,
     TriageRequest,
@@ -54,6 +67,7 @@ app.include_router(rbac_router)
 app.include_router(crud_router)
 app.include_router(ai_router)
 app.include_router(live_router)
+app.include_router(activity_counts_router)
 
 _ANALYTICS_ROLES = (RBC_ADMIN, SUPER_ADMIN)
 
@@ -123,6 +137,9 @@ async def password_enforce_middleware(request, call_next):
 
 @app.on_event("startup")
 def on_startup() -> None:
+    from app.logging_filters import install_secret_masking
+
+    install_secret_masking()
     # Refuse insecure defaults when not in demo mode.
     if not settings.demo_mode:
         defaults = {
@@ -140,6 +157,29 @@ def on_startup() -> None:
                 "Refusing to start: ZM_DEMO_MODE=false but ZM_DEMO_PASSWORD is still a demo default."
             )
     init_db()
+    # FastAPI may keep included routers as _IncludedRouter (no flat .path); use OpenAPI.
+    try:
+        ai_paths = sorted(p for p in app.openapi().get("paths", {}) if p.startswith("/ai/"))
+    except Exception:
+        ai_paths = []
+    print(f"[startup] AI routes ({len(ai_paths)}): {', '.join(ai_paths)}")
+    # Do not block startup with live Gemini/Groq pings (that made /health and login hang).
+    try:
+        from app.services.ai.orchestrator import refresh_configured_flags
+
+        refresh_configured_flags()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[startup] AI config refresh error: {exc}")
+    print(
+        "[startup] AI mode="
+        f"{settings.ai_provider_mode} timeout={settings.ai_timeout_seconds}s "
+        f"chat_timeout={getattr(settings, 'ai_chat_timeout_seconds', 8)}s "
+        f"fail_fast={getattr(settings, 'ai_fail_fast_seconds', 2.5)}s "
+        f"cooldown={settings.ai_circuit_cooldown_minutes}m "
+        f"gemini_key={'yes' if settings.gemini_api_key else 'no'} "
+        f"groq_key={'yes' if settings.groq_api_key else 'no'} "
+        f"(values never logged; live pings skipped at startup)"
+    )
 
 
 def _case_dict(body: TriageRequest) -> dict[str, Any]:
@@ -155,6 +195,16 @@ def _case_dict(body: TriageRequest) -> dict[str, Any]:
         "severe_breathing_difficulty": int(body.severe_breathing_difficulty),
         "tdr_result": body.tdr_result,
     }
+    if body.pale_palms_or_eyelids is not None:
+        case["pale_palms_or_eyelids"] = body.pale_palms_or_eyelids
+    if body.blood_in_stool is not None:
+        case["blood_in_stool"] = body.blood_in_stool
+    if body.dark_or_bloody_urine is not None:
+        case["dark_or_bloody_urine"] = body.dark_or_bloody_urine
+    if body.bleeding_nose_gums_skin_or_vomit_blood is not None:
+        case["bleeding_nose_gums_skin_or_vomit_blood"] = body.bleeding_nose_gums_skin_or_vomit_blood
+    if body.hemoglobin_g_dl is not None:
+        case["hemoglobin_g_dl"] = body.hemoglobin_g_dl
 
 
 def _referral_out(row: Referral, now: datetime | None = None) -> ReferralOut:
@@ -187,7 +237,8 @@ def _referral_out(row: Referral, now: datetime | None = None) -> ReferralOut:
 
 
 @app.get("/health", response_model=HealthOut)
-def health() -> HealthOut:
+async def health() -> HealthOut:
+    """Async so sync TTS/AI work cannot starve the health check / login proxy probes."""
     return HealthOut(
         status="ok",
         synthetic=True,
@@ -282,6 +333,10 @@ def triage(body: TriageRequest) -> TriageResponse:
     payload = result.to_dict()
     payload["extracted_from_text"] = extracted
     payload["ml_threshold_treat_to_refer"] = 0.35
+    if body.include_ai_trace:
+        from app.services.ai.ai_trace import build_ai_trace
+
+        payload["ai_trace"] = build_ai_trace(case, payload, language=body.language or "rw")
     return TriageResponse(**payload)
 
 
@@ -696,6 +751,73 @@ def sync_batch(body: SyncRequest, db: Session = Depends(get_db)) -> SyncResponse
             else:
                 accepted += 1
             results.append({"client_uuid": item.client_uuid, "ok": True, "duplicate": dup, "id": row.id})
+        elif item.type == "activity_count":
+            try:
+                payload = ActivityCountCreate(**item.payload)
+            except Exception as exc:
+                results.append({"client_uuid": item.client_uuid, "ok": False, "error": str(exc)})
+                continue
+            if payload.client_uuid != item.client_uuid:
+                payload.client_uuid = item.client_uuid
+            chw_id = (item.payload.get("chw_id") or payload.model_dump().get("chw_id") or "").strip()
+            facility_id = (item.payload.get("facility_id") or "").strip()
+            if not chw_id or not facility_id:
+                results.append(
+                    {
+                        "client_uuid": item.client_uuid,
+                        "ok": False,
+                        "error": "activity_count sync requires chw_id and facility_id in payload",
+                    }
+                )
+                continue
+            from app.services.activity_counts import upsert_manual_row
+
+            metrics = {
+                k: getattr(payload, k)
+                for k in (
+                    "patients_seen",
+                    "patients_treated",
+                    "rdt_done",
+                    "rdt_positive",
+                    "referred",
+                )
+            }
+            try:
+                existed_sync = (
+                    db.query(SyncEvent).filter(SyncEvent.client_uuid == item.client_uuid).first()
+                    is not None
+                )
+                row, _action = upsert_manual_row(
+                    db,
+                    user_id=chw_id,
+                    chw_id=chw_id,
+                    facility_id=facility_id,
+                    body_metrics=metrics,
+                    client_uuid=payload.client_uuid,
+                    day_str=payload.date,
+                    note=payload.note,
+                    expected_version=payload.version,
+                )
+                if not existed_sync:
+                    db.add(SyncEvent(client_uuid=item.client_uuid, payload_type="activity_count"))
+                    accepted += 1
+                    dup = False
+                else:
+                    duplicates += 1
+                    dup = True
+                db.commit()
+                db.refresh(row)
+                results.append(
+                    {
+                        "client_uuid": item.client_uuid,
+                        "ok": True,
+                        "duplicate": dup,
+                        "id": row.id,
+                    }
+                )
+            except ValueError as exc:
+                db.rollback()
+                results.append({"client_uuid": item.client_uuid, "ok": False, "error": str(exc)})
         else:
             # triage sync: store as idempotent event only for demo
             exists = db.query(SyncEvent).filter(SyncEvent.client_uuid == item.client_uuid).first()

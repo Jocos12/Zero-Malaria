@@ -96,3 +96,86 @@ body {
   min-height: 48px;
   min-width: 48px;
 }
+
+@keyframes zm-pulse-once {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  40% {
+    transform: scale(1.02);
+    opacity: 0.92;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-safe\:animate-\[zm-pulse-once_1\.2s_ease-out_1\] {
+    animation: none !important;
+  }
+}
+
+/* Result modal / chat independent scroll panes */
+.zm-scroll-pane {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-ink) 45%, transparent)
+    color-mix(in srgb, var(--color-surface-muted) 90%, var(--color-border));
+}
+.zm-scroll-pane:focus-visible {
+  outline: 2px solid rgba(20, 128, 122, 0.7);
+  outline-offset: 2px;
+}
+.zm-scroll-pane::-webkit-scrollbar {
+  width: 10px;
+}
+.zm-scroll-pane::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--color-surface-muted) 85%, var(--color-border));
+  border-radius: 999px;
+}
+.zm-scroll-pane::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-ink) 40%, var(--color-border));
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.zm-scroll-pane::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-ink) 55%, var(--color-border));
+  background-clip: padding-box;
+}
+.dark .zm-scroll-pane {
+  scrollbar-color: color-mix(in srgb, var(--color-ink) 55%, transparent)
+    color-mix(in srgb, var(--color-surface-muted) 80%, #000);
+}
+.dark .zm-scroll-pane::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-ink) 50%, #000);
+  background-clip: padding-box;
+}
+.zm-scroll-fade {
+  position: relative;
+}
+.zm-scroll-fade::before,
+.zm-scroll-fade::after {
+  content: '';
+  pointer-events: none;
+  position: sticky;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: block;
+  height: 12px;
+}
+.zm-scroll-fade::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--color-surface), transparent);
+}
+.zm-scroll-fade::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--color-surface), transparent);
+}

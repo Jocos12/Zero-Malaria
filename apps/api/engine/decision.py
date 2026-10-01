@@ -60,6 +60,8 @@ class DecisionResult:
     reason_details: list[dict[str, Any]] = field(default_factory=list)
     missing_info: list[str] = field(default_factory=list)
     protocol_reference: str = ""
+    inform_nurse_fields: list[str] = field(default_factory=list)
+    pending_blood_clinical_validation: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +73,8 @@ class DecisionResult:
             "reason_details": self.reason_details,
             "missing_info": self.missing_info,
             "protocol_reference": self.protocol_reference,
+            "inform_nurse_fields": list(self.inform_nurse_fields),
+            "pending_blood_clinical_validation": self.pending_blood_clinical_validation,
             "ml_escalated": self.ml_escalated,
             "severe_risk": self.severe_risk,
             "referral_noncompletion_risk": self.referral_noncompletion_risk,
@@ -203,11 +207,17 @@ def combine_decision(
             locked = max_decision(rules_result.decision, proposed, cfg)
             if decision_rank(locked, cfg) > decision_rank(rules_result.decision, cfg):
                 ml_escalated = True
-                reasons.append(
-                    f"ML escalation (severe risk {severe_risk:.2f}) — architecture demo only"
-                )
+                if language.startswith("rw"):
+                    reasons.append(
+                        f"ML yongeye ubwihutirwa (amanota {severe_risk:.2f}). Demo ya architecture gusa."
+                    )
+                else:
+                    reasons.append(
+                        f"ML escalation (severe risk {severe_risk:.2f}). Architecture demo only."
+                    )
                 if shap_factors:
-                    reasons.extend([f"Model factor: {f}" for f in shap_factors[:3]])
+                    prefix = "Impamvu ya model:" if language.startswith("rw") else "Model factor:"
+                    reasons.extend([f"{prefix} {f}" for f in shap_factors[:3]])
             final = locked
 
         ref_thr = float(
@@ -216,9 +226,14 @@ def combine_decision(
             )
         )
         if referral_risk is not None and referral_risk >= ref_thr and final in {"refer", "urgent_refer"}:
-            reasons.append(
-                f"Elevated risk that referral may not be completed ({referral_risk:.2f}) — follow up"
-            )
+            if language.startswith("rw"):
+                reasons.append(
+                    f"Ibyago byo kutagera ku kigo byinshi ({referral_risk:.2f}). Kurikiranira kohereza."
+                )
+            else:
+                reasons.append(
+                    f"Elevated risk that referral may not be completed ({referral_risk:.2f}). Follow up."
+                )
 
     # Confidence: rules-only high when urgent locked; else blend
     if rules_result.decision == "urgent_refer":
@@ -244,6 +259,8 @@ def combine_decision(
         reason_details=[r.to_dict() for r in rules_result.reason_details],
         missing_info=list(rules_result.missing_info),
         protocol_reference=rules_result.protocol_reference,
+        inform_nurse_fields=list(rules_result.inform_nurse_fields),
+        pending_blood_clinical_validation=rules_result.pending_blood_clinical_validation,
     )
 
 

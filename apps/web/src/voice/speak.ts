@@ -3,8 +3,10 @@ import { getPhrase, type PhraseId, type VoiceLang } from './phrases';
 
 const MUTE_KEY = 'zm_voice_mute';
 const SPEED_KEY = 'zm_voice_speed';
+const VOLUME_KEY = 'zm_voice_volume';
+const GAIN_KEY = 'zm_voice_gain_boost';
 
-export type VoiceSpeed = 0.8 | 1 | 1.2;
+export type VoiceSpeed = 0.75 | 1 | 1.25;
 export type PlaybackSource = 'audio_pack' | 'cloud' | 'browser' | 'text';
 
 let audioUnlocked = false;
@@ -13,10 +15,15 @@ let sequenceToken = 0;
 let gestureHookInstalled = false;
 const audioPackCache: Partial<Record<VoiceLang, boolean>> = {};
 const missingAudioLogged = new Set<string>();
+let audioCtx: AudioContext | null = null;
+let gainNode: GainNode | null = null;
+let compressor: DynamicsCompressorNode | null = null;
+const wiredElements = new WeakSet<HTMLAudioElement>();
 
 /** Fail-fast probe for missing pack files (never hang the UI). */
 const MP3_PROBE_MS = 400;
-const CLOUD_TTS_MS = 2000;
+/** Pindo RW TTS can take a few seconds; keep triage responsive but allow synthesis. */
+const CLOUD_TTS_MS = 12000;
 /** Silent text highlight must not feel like a stalled step. */
 const SILENT_FALLBACK_MS = 80;
 
@@ -26,8 +33,101 @@ function readMute(): boolean {
 
 function readSpeed(): VoiceSpeed {
   const v = Number(localStorage.getItem(SPEED_KEY));
-  if (v === 0.8 || v === 1 || v === 1.2) return v;
+  if (v === 0.75 || v === 1 || v === 1.25) return v;
+  if (v === 0.8) return 0.75;
+  if (v === 1.2) return 1.25;
   return 1;
+}
+
+function readVolume(): number {
+  const v = Number(localStorage.getItem(VOLUME_KEY));
+  if (Number.isFinite(v)) return Math.min(100, Math.max(0, v));
+  const fromReadAloud = (() => {
+    try {
+      const raw = localStorage.getItem('zm_read_aloud_prefs');
+      if (!raw) return 85;
+      const p = JSON.parse(raw) as { volume?: number };
+      return typeof p.volume === 'number' ? p.volume : 85;
+    } catch {
+      return 85;
+    }
+  })();
+  return fromReadAloud;
+}
+
+function readGainBoost(): number {
+  const v = Number(localStorage.getItem(GAIN_KEY));
+  if (Number.isFinite(v)) return Math.min(200, Math.max(100, v));
+  try {
+    const raw = localStorage.getItem('zm_read_aloud_prefs');
+    if (!raw) return 100;
+    const p = JSON.parse(raw) as { gainBoost?: number };
+    return typeof p.gainBoost === 'number' ? Math.min(200, Math.max(100, p.gainBoost)) : 100;
+  } catch {
+    return 100;
+  }
+}
+
+export function setPlaybackVolume(volume: number): void {
+  localStorage.setItem(VOLUME_KEY, String(Math.min(100, Math.max(0, volume))));
+  applyGain();
+}
+
+export function setPlaybackGainBoost(percent: number): void {
+  localStorage.setItem(GAIN_KEY, String(Math.min(200, Math.max(100, percent))));
+  applyGain();
+}
+
+export function getPlaybackVolume(): number {
+  return readVolume();
+}
+
+function ensureAudioGraph(): void {
+  if (typeof window === 'undefined') return;
+  if (!audioCtx) {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    audioCtx = new Ctx();
+    compressor = audioCtx.createDynamicsCompressor();
+    gainNode = audioCtx.createGain();
+    gainNode.connect(compressor);
+    compressor.connect(audioCtx.destination);
+    compressor.threshold.value = -6;
+    compressor.knee.value = 8;
+    compressor.ratio.value = 16;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.15;
+  }
+  applyGain();
+}
+
+function applyGain(): void {
+  if (!gainNode) return;
+  const vol = readVolume() / 100;
+  const boost = readGainBoost() / 100;
+  gainNode.gain.value = Math.min(2, vol * boost);
+}
+
+function wireElementToGraph(audio: HTMLAudioElement): void {
+  ensureAudioGraph();
+  if (!audioCtx || !gainNode || wiredElements.has(audio)) return;
+  try {
+    const source = audioCtx.createMediaElementSource(audio);
+    source.connect(gainNode);
+    wiredElements.add(audio);
+  } catch {
+    /* element may already be wired */
+  }
+}
+
+async function resumeAudioContext(): Promise<void> {
+  if (audioCtx?.state === 'suspended') {
+    try {
+      await audioCtx.resume();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 export function isMuted(): boolean {
@@ -68,6 +168,7 @@ export function stopSpeaking(): void {
   sequenceToken += 1;
   if (currentAudio) {
     currentAudio.pause();
+    currentAudio.currentTime = 0;
     currentAudio = null;
   }
   if (typeof window !== 'undefined' && window.speechSynthesis) {
@@ -176,7 +277,12 @@ async function probeMp3Exists(url: string): Promise<boolean> {
   }
 }
 
-async function tryMp3(id: PhraseId, lang: VoiceLang, speed: VoiceSpeed): Promise<boolean> {
+async function tryMp3(
+  id: PhraseId,
+  lang: VoiceLang,
+  speed: VoiceSpeed,
+  failMs = 2500,
+): Promise<boolean> {
   const url = `/audio/${lang}/${id}.mp3`;
   // Play directly — do not await a HEAD probe on the UI path (HEAD can hang or 405).
   // Optional short existence cache warm-up runs in the background only.
@@ -187,6 +293,8 @@ async function tryMp3(id: PhraseId, lang: VoiceLang, speed: VoiceSpeed): Promise
     const audio = new Audio(url);
     audio.preload = 'auto';
     audio.playbackRate = speed;
+    wireElementToGraph(audio);
+    void resumeAudioContext();
     currentAudio = audio;
     let settled = false;
     const finish = (ok: boolean) => {
@@ -196,7 +304,7 @@ async function tryMp3(id: PhraseId, lang: VoiceLang, speed: VoiceSpeed): Promise
       if (!ok) warnMissingAudio(lang, id);
       resolve(ok);
     };
-    const failTimer = window.setTimeout(() => finish(false), 8000);
+    const failTimer = window.setTimeout(() => finish(false), failMs);
     audio.onended = () => finish(true);
     audio.onerror = () => finish(false);
     void audio.play().then(
@@ -208,7 +316,11 @@ async function tryMp3(id: PhraseId, lang: VoiceLang, speed: VoiceSpeed): Promise
   });
 }
 
-async function tryCloudTts(id: PhraseId, lang: VoiceLang, text: string): Promise<string | null> {
+async function tryCloudTts(
+  id: PhraseId,
+  lang: VoiceLang,
+  text: string,
+): Promise<{ url: string; mode: string } | null> {
   try {
     const res = await withTimeout(
       api.voiceSpeak({ phrase_id: id, language: lang, text }),
@@ -216,7 +328,9 @@ async function tryCloudTts(id: PhraseId, lang: VoiceLang, text: string): Promise
       { audio_url: null } as Record<string, unknown>,
     );
     const url = typeof res.audio_url === 'string' ? res.audio_url : null;
-    return url;
+    if (!url) return null;
+    const mode = typeof res.mode === 'string' ? res.mode : 'cloud';
+    return { url, mode };
   } catch {
     return null;
   }
@@ -226,6 +340,8 @@ async function tryCloudMp3(url: string, speed: VoiceSpeed): Promise<boolean> {
   return new Promise((resolve) => {
     const audio = new Audio(url);
     audio.playbackRate = speed;
+    wireElementToGraph(audio);
+    void resumeAudioContext();
     currentAudio = audio;
     const t = window.setTimeout(() => resolve(false), 8000);
     audio.onended = () => {
@@ -252,6 +368,7 @@ function trySpeechSynthesis(text: string, lang: VoiceLang, speed: VoiceSpeed): P
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = speechLang(lang);
     utter.rate = speed;
+    utter.volume = readVolume() / 100;
     const voice = pickVoice(lang);
     if (voice) utter.voice = voice;
     utter.onend = () => resolve(true);
@@ -279,22 +396,40 @@ export async function speakPhrase(
     return { source: 'text' };
   }
 
-  // Prefer pre-recorded pack (required for Kinyarwanda - browsers lack rw TTS voices).
-  if (audioUnlocked && (await tryMp3(id, lang, speed))) {
+  const packMissing = audioPackCache[lang] === false;
+  const online = typeof navigator === 'undefined' || navigator.onLine;
+
+  // Kinyarwanda: local pack first (instant). Cloud/Pindo only if pack missing. Never Chrome.
+  if (lang === 'rw') {
+    if (audioUnlocked && !packMissing && (await tryMp3(id, lang, speed, 1200))) {
+      audioPackCache[lang] = true;
+      return { source: 'audio_pack' };
+    }
+    if (online) {
+      const cloud = await tryCloudTts(id, lang, text);
+      if (cloud && audioUnlocked && (await tryCloudMp3(cloud.url, speed))) {
+        if (cloud.mode === 'phrase_pack') return { source: 'audio_pack' };
+        return { source: 'cloud' };
+      }
+    }
+    await silentHighlight();
+    return { source: 'text' };
+  }
+
+  // English: pack → optional cloud → browser TTS.
+  if (audioUnlocked && !packMissing && (await tryMp3(id, lang, speed))) {
     audioPackCache[lang] = true;
     return { source: 'audio_pack' };
   }
 
-  // Cloud TTS optional when online (hard timeout — never block triage UX).
-  if (typeof navigator === 'undefined' || navigator.onLine) {
-    const cloudUrl = await tryCloudTts(id, lang, text);
-    if (cloudUrl && audioUnlocked && (await tryCloudMp3(cloudUrl, speed))) {
-      return { source: 'cloud' };
+  if (online) {
+    const cloud = await tryCloudTts(id, lang, text);
+    if (cloud && audioUnlocked && (await tryCloudMp3(cloud.url, speed))) {
+      return { source: cloud.mode === 'phrase_pack' ? 'audio_pack' : 'cloud' };
     }
   }
 
-  // Never use English browser TTS for Kinyarwanda. Short text fallback only.
-  if (lang !== 'rw' && (await trySpeechSynthesis(text, lang, speed))) {
+  if (await trySpeechSynthesis(text, lang, speed)) {
     return { source: 'browser' };
   }
 

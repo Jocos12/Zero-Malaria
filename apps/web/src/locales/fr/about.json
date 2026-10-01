@@ -1,6 +1,6 @@
 {
-  "title": "About",
-  "appTitle": "ZeroMalaria decision support",
-  "body": "Hackathon prototype for guided malaria triage, referral handover, and district visibility.",
-  "guidelineVersion": "Guideline rules {{version}}"
+ "title": "About",
+ "appTitle": "ZeroMalaria decision support",
+ "body": "Hackathon prototype for guided malaria triage, referral handover, and district visibility.",
+ "guidelineVersion": "Guideline rules {{version}}"
 }

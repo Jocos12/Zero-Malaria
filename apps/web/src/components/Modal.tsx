@@ -44,7 +44,7 @@ function getFocusable(root: HTMLElement): HTMLElement[] {
   );
 }
 
-export type ModalSize = 'sm' | 'md' | 'lg';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
 type ModalProps = {
   open: boolean;
@@ -53,6 +53,8 @@ type ModalProps = {
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
+  /** Optional sticky custom header (replaces default title row content when set). */
+  header?: ReactNode;
   size?: ModalSize;
   /** When true, overlay/Esc ask before closing. */
   dirty?: boolean;
@@ -60,12 +62,18 @@ type ModalProps = {
   testId?: string;
   /** When false, hide the header close button (e.g. enforce password policy). */
   closable?: boolean;
+  /** Body fills remaining height with overflow hidden (for split panes that scroll themselves). */
+  fillBody?: boolean;
+  /** Extra classes on the scroll/body region. */
+  bodyClassName?: string;
 };
 
 const sizeClass: Record<ModalSize, string> = {
   sm: 'sm:max-w-[420px]',
   md: 'sm:max-w-[560px]',
   lg: 'sm:max-w-[720px]',
+  xl: 'sm:max-w-[1200px]',
+  full: 'sm:max-w-[min(1400px,96vw)] max-h-[100dvh] sm:max-h-[96dvh] sm:rounded-[24px]',
 };
 
 /** Centered dialog (bottom sheet below 640px). */
@@ -76,11 +84,14 @@ export function Modal({
   description,
   children,
   footer,
+  header,
   size = 'md',
   dirty = false,
   onDiscardConfirm,
   testId = 'modal',
   closable = true,
+  fillBody = false,
+  bodyClassName,
 }: ModalProps) {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
@@ -169,19 +180,34 @@ export function Modal({
         className={cn(
           'zm-glass zm-glass-strong relative z-10 flex w-full max-h-[92dvh] flex-col overflow-hidden rounded-t-[28px] outline-none sm:max-h-[90dvh] sm:rounded-[32px]',
           'text-ink',
+          size === 'full' && 'h-[100dvh] sm:h-auto rounded-none',
           sizeClass[size],
           !reduce && 'animate-modalIn',
         )}
       >
-        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--zm-separator)] px-4 py-3 sm:px-5">
-          <div className="min-w-0">
-            <h2 id={titleId} className="text-lg font-semibold tracking-tight text-ink">
-              {title}
-            </h2>
-            {description ? (
-              <p id={descId} className="mt-0.5 text-sm text-ink-muted">
-                {description}
-              </p>
+        <header
+          className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-2 border-b border-[var(--zm-separator)] bg-[var(--zm-glass-bg,var(--color-surface))] px-4 py-2 sm:px-5"
+          data-testid="modal-sticky-header"
+        >
+          <div className="min-w-0 flex-1">
+            {header ? (
+              header
+            ) : (
+              <>
+                <h2 id={titleId} className="text-lg font-semibold tracking-tight text-ink">
+                  {title}
+                </h2>
+                {description ? (
+                  <p id={descId} className="mt-0.5 text-sm text-ink-muted">
+                    {description}
+                  </p>
+                ) : null}
+              </>
+            )}
+            {header ? (
+              <h2 id={titleId} className="sr-only">
+                {title}
+              </h2>
             ) : null}
           </div>
           {closable ? (
@@ -195,11 +221,23 @@ export function Modal({
             </button>
           ) : null}
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+        <div
+          className={cn(
+            'min-h-0 flex-1 overscroll-contain',
+            fillBody
+              ? 'flex flex-col overflow-hidden p-0'
+              : 'overflow-y-auto scroll-pt-4 px-4 pb-4 pt-3 sm:px-5',
+            bodyClassName,
+          )}
+          data-testid="modal-body"
+        >
           {children}
         </div>
         {footer ? (
-          <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--zm-separator)] px-4 py-3 sm:px-5">
+          <footer
+            className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--zm-separator)] px-4 py-3 sm:px-5"
+            data-testid="modal-sticky-footer"
+          >
             {footer}
           </footer>
         ) : null}

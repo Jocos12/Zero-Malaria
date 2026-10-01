@@ -24,11 +24,21 @@ export type TriageDraft = {
   updatedAt: string;
 };
 
+/** Fixed TTS phrases for the assistant avatar (never live mic recordings). */
+export type AvatarAudioCache = {
+  id: string;
+  lang: string;
+  text: string;
+  blob: Blob;
+  updatedAt: string;
+};
+
 class ZeroMalariaDB extends Dexie {
   cases!: Table<LocalCase, number>;
   referrals!: Table<LocalReferral, number>;
   syncQueue!: Table<SyncQueueItem, number>;
   triageDrafts!: Table<TriageDraft, string>;
+  avatarAudio!: Table<AvatarAudioCache, string>;
 
   constructor() {
     super('zeromalaria');
@@ -42,6 +52,13 @@ class ZeroMalariaDB extends Dexie {
       referrals: '++id, client_uuid, status, created_at, synced',
       syncQueue: '++id, client_uuid, created_at',
       triageDrafts: 'id, updatedAt',
+    });
+    this.version(3).stores({
+      cases: '++id, client_uuid, created_at, synced',
+      referrals: '++id, client_uuid, status, created_at, synced',
+      syncQueue: '++id, client_uuid, created_at',
+      triageDrafts: 'id, updatedAt',
+      avatarAudio: 'id, lang, updatedAt',
     });
   }
 }
@@ -84,6 +101,29 @@ export async function enqueueReferral(referral: LocalReferral) {
       reasons: referral.reasons,
       summary: referral.summary,
     },
+    created_at: new Date().toISOString(),
+  });
+}
+
+export type ActivityCountQueuePayload = {
+  client_uuid: string;
+  chw_id: string;
+  facility_id: string;
+  date: string;
+  patients_seen: number;
+  patients_treated: number;
+  rdt_done: number;
+  rdt_positive: number;
+  referred: number;
+  note?: string | null;
+  version?: number | null;
+};
+
+export async function enqueueActivityCount(payload: ActivityCountQueuePayload) {
+  await db.syncQueue.put({
+    client_uuid: payload.client_uuid,
+    type: 'activity_count',
+    payload,
     created_at: new Date().toISOString(),
   });
 }

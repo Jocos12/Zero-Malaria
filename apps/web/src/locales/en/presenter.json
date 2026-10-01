@@ -1,12 +1,13 @@
 {
-  "translationReview": "Translation review",
-  "colKey": "Key",
-  "colEn": "English",
-  "colRw": "Kinyarwanda",
-  "colStatus": "Status",
-  "statusDraft": "Draft",
-  "statusReviewed": "Reviewed",
-  "draftOnly": "Show draft keys only",
-  "devOnlyHint": "Dev-only page. Draft keys need native review before production.",
-  "steps": "Steps"
+ "translationReview": "Translation review",
+ "aiProvider": "AI provider",
+ "colKey": "Key",
+ "colEn": "English",
+ "colRw": "Kinyarwanda",
+ "colStatus": "Status",
+ "statusDraft": "Draft",
+ "statusReviewed": "Reviewed",
+ "draftOnly": "Show draft keys only",
+ "devOnlyHint": "Dev-only page. Draft keys need native review before production.",
+ "steps": "Steps"
 }

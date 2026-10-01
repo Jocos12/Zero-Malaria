@@ -7,12 +7,12 @@ Offline-first, AI-assisted malaria **triage and referral** platform for Rwanda:
 
 | Experience | Who (role) | Routes |
 | --- | --- | --- |
-| CHW mobile PWA | `CHW` | `/m/*` (phone); desktop `/app/*` when preferred |
+| CHW web app | `CHW` | `/app/home`, `/app/triage`, `/app/my-patients`, … |
 | Health center | `HEALTH_CENTER` | `/app/referrals` inbox, facility tools |
 | District / national ops | `RBC_ADMIN` | `/app/dashboard`, Users (scoped), facilities |
 | Platform admin | `SUPER_ADMIN` | Full `/app/*` admin (users, RBAC, audit) |
 
-App shell (`/app/*`): fixed sidebar, sticky header, only main content scrolls; create/edit/confirm use centered modals (bottom sheet on phones).
+Single responsive web shell (`/app/*`): fixed sidebar (drawer below 1024px), sticky header, only main content scrolls; create/edit/confirm use centered modals (bottom sheet below 640px). Legacy `/m/*` paths redirect to `/app/*`.
 
 > **Decision support tool. Not a replacement for clinical judgment.**  
 > **Synthetic demo data only** — not a patient registry, not clinical validation.
@@ -165,11 +165,21 @@ copy .env.example .env
 | `ZM_DEMO_MODE` | API | Enables `POST /auth/demo-login` | `true` |
 | `ZM_DEMO_PASSWORD` | API | Password for seeded `*.demo` users | `demo1234` |
 | `ZM_JWT_SECRET` | API | JWT signing secret | demo string (change if `ZM_DEMO_MODE=false`) |
-| `ZM_GEMINI_API_KEY` | API | Optional Gemini (Layer 3) | empty → skip |
-| `ZM_GROQ_API_KEY` | API | Optional Groq fallback | empty → skip |
+| `GEMINI_API_KEY` | API only | Gemini key (never in frontend) | empty → skip / local |
+| `GROQ_API_KEY` | API only | Groq key (never in frontend) | empty → skip / local |
+| `GEMINI_MODEL` | API | Gemini model id | `gemini-3.8-flash` |
+| `GROQ_MODEL` | API | Groq model id | `openai/gpt-oss-20b` |
+| `AI_TIMEOUT_SECONDS` | API | Per-provider timeout | `10` |
+| `AI_COOLDOWN_MINUTES` | API | Circuit breaker after 429 | `5` |
+| `AI_DEBUG` | API | Extra AI logs (no secrets) | `false` |
+| `ZM_GEMINI_API_KEY` / `ZM_GROQ_API_KEY` | API | Aliases for the keys above | empty |
 | `ZM_GOOGLE_CLOUD_PROJECT` | API | Optional Vertex | empty → skip |
 | `ZM_AI_PROVIDER_ORDER` | API | Fallback chain | `gemini,groq,local` |
-| `ZM_AI_TIMEOUT_SECONDS` | API | Per-provider timeout | `4` |
+| `ZM_AI_TIMEOUT_SECONDS` | API | Per-provider timeout (seconds) | `8` |
+| `AI_PROVIDER_MODE` | API | `cascade` \| `race` \| `consensus` | `cascade` |
+| `AI_CIRCUIT_COOLDOWN_MINUTES` | API | Quota cooldown after 429 | `10` |
+
+Check `GET /ai/health` for `{configured, reachable, quota_state, last_error}` per provider (no secrets). Vite proxies `/api/*` → API (strips `/api`).
 | `VITE_DEMO_MODE` | Web (`.env.development`) | Show demo login buttons | `true` in development; `false` in production build |
 
 **Security:** If `ZM_DEMO_MODE=false` and JWT secret or demo password are still the example defaults, the API **refuses to start**.  
@@ -256,7 +266,7 @@ After `make seed` / `seed.py`, the terminal prints this table. Password is **`ZM
 
 | Username | Role (code) | Lands on (desktop) |
 | --- | --- | --- |
-| `chw.demo` | CHW | `/app/home` (phone: `/m/home`) |
+| `chw.demo` | CHW | `/app/home` |
 | `health.center` | HEALTH_CENTER | `/app/referrals` |
 | `rbc.admin` | RBC_ADMIN | `/app/dashboard` |
 | `super.admin` | SUPER_ADMIN | `/app/dashboard` |
@@ -307,14 +317,22 @@ Invalid JSON / drug-dose language → reject and fall through.
 
 ### Voice
 
-Playback order per phrase + language:
+Visible flow: **Listen → Transcribe → Think → Speak** (UI stepper). Auth: `voice:use` + shared API client (FormData never sets Content-Type).
+
+Playback / engine order:
 
 1. `/public/audio/{rw|en}/<phrase_id>.mp3`  
-2. `POST /voice/speak` (cloud or Mock)  
-3. Browser TTS **only if voice language matches** (Kinyarwanda is never read with an English voice)  
-4. On-screen highlighted text  
+2. `POST /voice/speak` plan (phrase pack preferred)  
+3. English: `ZM_VOICE_ENGINE_EN=browser | vertex_tts | vertex_live` (Vertex needs `GOOGLE_APPLICATION_CREDENTIALS`, `ZM_GOOGLE_CLOUD_PROJECT`, `ZM_GOOGLE_CLOUD_LOCATION`; enable Speech-to-Text, Cloud Text-to-Text, Vertex AI APIs)  
+4. Kinyarwanda: pack → MMS TTS (`ZM_MMS_TTS_ENDPOINT` if set) → **text only** — never English browser voice for RW  
+5. STT: `ZM_STT_PROVIDER_ORDER` (demo default starts with `mock`)  
+6. Triage **read-aloud**: phrase-pack only (toggle on `/app/triage`); volume / Loud boost via Web Audio; `/voice/capabilities` reports honest engine status
 
-Result audio uses **fixed catalog + triggered rules only** — not free LLM text.
+Result decision audio uses **fixed catalog + triggered rules only** — not free LLM text. Prevention / chat answers may be spoken from guarded `/ai/chat` text after symbol cleanup. Blood-related triage questions are stored with `pending_clinical_validation` (inform nurse; no auto-escalation until RBC enables).
+
+### AI chat
+
+`POST /ai/chat` (SSE): intent router (`case_summary`, `why`, `tell_family`, `prevention`, …) + case snapshot (no names/phones/IDs) → Gemini → Groq → intent-aware Local. Answers follow the **question language** (RW / EN / FR).
 
 ---
 
@@ -423,8 +441,8 @@ Hackathon student prototype for educational demonstration.
 | URL | Screen |
 | --- | --- |
 | http://localhost:5173/login | Login (demo buttons if `VITE_DEMO_MODE`) |
-| http://localhost:5173/app/chw | CHW desktop home |
-| http://localhost:5173/m/home | CHW phone shell |
+| http://localhost:5173/app/home | CHW home |
+| http://localhost:5173/app/triage | Guided triage |
 | http://localhost:5173/app/referrals | Nurse inbox |
 | http://localhost:5173/app/dashboard | Supervisor / RBC dashboard |
 | http://127.0.0.1:8000/docs | OpenAPI |

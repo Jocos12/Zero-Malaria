@@ -14,12 +14,18 @@ class TriageRequest(BaseModel):
     vomiting_everything: bool = False
     lethargy: bool = False
     severe_breathing_difficulty: bool = False
+    pale_palms_or_eyelids: Optional[Literal["yes", "no", "unknown"]] = None
+    blood_in_stool: Optional[Literal["yes", "no", "unknown"]] = None
+    dark_or_bloody_urine: Optional[Literal["yes", "no", "unknown"]] = None
+    bleeding_nose_gums_skin_or_vomit_blood: Optional[Literal["yes", "no", "unknown"]] = None
+    hemoglobin_g_dl: Optional[float] = Field(default=None, ge=0, le=25)
     tdr_result: Literal["positive", "negative", "invalid"] = "positive"
-    language: str = "en"
+    language: str = "rw"
     use_ml: bool = True
     free_text: Optional[str] = None
     # Architecture demo only: "ml_escalate" injects synthetic ML score >= 0.35
     demo_scenario: Optional[str] = None
+    include_ai_trace: bool = True
 
 
 class TriageResponse(BaseModel):
@@ -41,6 +47,9 @@ class TriageResponse(BaseModel):
     reason_details: list[dict[str, Any]] = []
     missing_info: list[str] = []
     protocol_reference: Optional[str] = None
+    inform_nurse_fields: list[str] = []
+    pending_blood_clinical_validation: bool = False
+    ai_trace: Optional[dict[str, Any]] = None
 
 
 class ReferralCreate(BaseModel):
@@ -92,7 +101,7 @@ class StatusUpdate(BaseModel):
 
 class SyncItem(BaseModel):
     client_uuid: str
-    type: Literal["referral", "triage"]
+    type: Literal["referral", "triage", "activity_count"]
     payload: dict[str, Any]
 
 
@@ -130,3 +139,47 @@ class ReferralMessageOut(BaseModel):
     body: str
     created_at: datetime
     read_at: Optional[datetime] = None
+
+
+class ActivityCountMetrics(BaseModel):
+    patients_seen: int = Field(ge=0, le=500)
+    patients_treated: int = Field(ge=0, le=500)
+    rdt_done: int = Field(ge=0, le=500)
+    rdt_positive: int = Field(ge=0, le=500)
+    referred: int = Field(ge=0, le=500)
+
+
+class ActivityCountCreate(ActivityCountMetrics):
+    client_uuid: str
+    date: str = Field(description="ISO date YYYY-MM-DD")
+    note: Optional[str] = Field(default=None, max_length=2000)
+    version: Optional[int] = Field(default=None, description="Required when updating via client_uuid")
+
+
+class ActivityCountOut(ActivityCountMetrics):
+    id: str
+    client_uuid: str
+    chw_id: str
+    facility_id: str
+    date: str
+    source: Literal["auto", "manual"]
+    note: Optional[str] = None
+    version: int
+    created_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    confirmed_by: Optional[str] = None
+    confirmed_at: Optional[datetime] = None
+
+
+class ActivityCountSummaryOut(BaseModel):
+    synthetic: bool = True
+    date_from: str
+    date_to: str
+    auto_total: ActivityCountMetrics
+    manual_total: ActivityCountMetrics
+    combined: ActivityCountMetrics
+    note: str = (
+        "combined sums auto_total + manual_total by metric. "
+        "Auto and manual are distinct sources for the same day — never merged into one row."
+    )

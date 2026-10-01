@@ -1,8 +1,8 @@
 {
-  "title": "Alerts",
-  "notArrived": "Patient has not arrived, follow up",
-  "empty": "No active alerts.",
-  "emptyHint": "Closed-loop alerts appear when a referred patient is overdue.",
-  "high": "High priority",
-  "medium": "Needs follow-up"
+ "title": "Alerts",
+ "notArrived": "Patient has not arrived, follow up",
+ "empty": "No active alerts.",
+ "emptyHint": "Closed-loop alerts appear when a referred patient is overdue.",
+ "high": "High priority",
+ "medium": "Needs follow-up"
 }

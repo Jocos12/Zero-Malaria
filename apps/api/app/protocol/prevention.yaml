@@ -1,0 +1,111 @@
+# Prevention messaging catalog (no drugs/doses). Pending clinical validation.
+meta:
+  version: "0.1.0-demo"
+  protocol_name: "Community malaria prevention (PLACEHOLDER)"
+  pending_clinical_validation: true
+
+items:
+  - id: itn_net
+    who: family
+    when: "Every night, especially for children under 5"
+    why_template_en: "Sleeping under a treated net cuts mosquito bites for this {age_months}-month-old patient."
+    why_template_rw: "Gusinzira munsi y'urutoki rufite imiti birinda udukoko ku murwayi w'amezi {age_months}."
+    family_msg_en: "Use the bed net every night. Repair holes and re-treat when advised."
+    family_msg_rw: "Koresha urutoki buri joro. Vura imyanya n'usubire gutera imiti ikenewe."
+    applies_when: {}
+    source_ref: "WHO vector control / iCCM prevention (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: irs
+    who: chw
+    when: "During seasonal IRS campaigns or when village team schedules spraying"
+    why_template_en: "Indoor residual spraying in {village} reduces mosquitoes where the patient lives."
+    why_template_rw: "Gusasa mu nzu mu {village} bigabanya udukoko aho uyu murwayi aba."
+    family_msg_en: "Allow the spray team in when they visit. Clear food and cover water."
+    family_msg_rw: "Emerera abasasa iyo bagiye. Kuraho ibiribwa kandi ufunike amazi."
+    applies_when:
+      village_present: true
+    source_ref: "National IRS schedule (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: standing_water
+    who: family
+    when: "Weekly around the home"
+    why_template_en: "Removing standing water near the home lowers mosquito breeding risk for everyone."
+    why_template_rw: "Gukuraho amazi ahagaze hafi y'inzu bigabanya udukoko dubyara."
+    family_msg_en: "Empty containers, cover tanks, and clear blocked drains."
+    family_msg_rw: "Muyaze ibikoresho, mufunike ib tanki, mukure imiyoboro yahagaze."
+    applies_when: {}
+    source_ref: "WHO community prevention (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: dusk_dawn
+    who: family
+    when: "Sunset to sunrise and around dawn"
+    why_template_en: "Mosquitoes bite most at dusk and dawn; limit outdoor exposure for young children."
+    why_template_rw: "Udukoko duma cyane nimugoroba n'umuseke; birinda abana kuba hanze."
+    family_msg_en: "Keep infants indoors or under a net during peak biting hours."
+    family_msg_rw: "Abana bato bagume mu nzu cyangwa munsi y'urutoki mu gihe duduma cyane."
+    applies_when: {}
+    source_ref: "WHO vector behaviour (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: early_fever_care
+    who: chw
+    when: "At first fever or suspected malaria"
+    why_template_en: "Early assessment (RDT {tdr_result}) helps act before danger signs appear."
+    why_template_rw: "Gusuzuma vuba (TDR {tdr_result}) bifasha gukora mbere y'ibimenyetso by'akaga."
+    family_msg_en: "If fever starts, seek the CHW or facility the same day."
+    family_msg_rw: "Niba ubushyuhe butangiye, shaka CHW cyangwa ikigo uwo munsi."
+    applies_when: {}
+    source_ref: "iCCM fever assessment (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: follow_up_return
+    who: chw
+    when: "Per protocol after decision {decision}"
+    why_template_en: "Follow-up return visit is planned because the decision is {decision}."
+    why_template_rw: "Gusubira gukurikirana byateguwe kuko icyemezo ari {decision}."
+    family_msg_en: "Return on the day the CHW advises, or sooner if danger signs appear."
+    family_msg_rw: "Subira ku munsi CHW abwira, cyangwa vuba niba ibimenyetso by'akaga bigaragara."
+    applies_when:
+      decision:
+        - treat_at_home
+        - refer
+    source_ref: "iCCM follow-up (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: under5_extra
+    who: family
+    when: "Daily while child is under 5 years"
+    why_template_en: "Children under 5 (here: {age_months} months) need extra net use and prompt fever checks."
+    why_template_rw: "Abana bari munsi y'imyaka 5 (hano: amezi {age_months}) bakeneye urutoki n'ubushyuhe busuzumwa vuba."
+    family_msg_en: "Do not delay if the child cannot drink, vomits everything, or becomes very weak."
+    family_msg_rw: "Ntutinda niba umwana ntashobora kunywa, aruka byose, cyangwa agwa intege."
+    applies_when:
+      age_months_max: 59
+    source_ref: "iCCM under-five focus (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: pregnant_extra
+    who: facility
+    when: "Antenatal visits and any fever in pregnancy"
+    why_template_en: "Pregnant patients need facility-linked malaria prevention counselling."
+    why_template_rw: "Abatwite bakeneye inama zo kwirinda malaria ku kigo nderabuzima."
+    family_msg_en: "Attend ANC and report fever immediately during pregnancy."
+    family_msg_rw: "Jya mu bujyanama bwo gutwita kandi umenyeshe ubushyuhe ako kanya mu gihe utwite."
+    applies_when:
+      pregnancy: true
+    source_ref: "Malaria in pregnancy guidelines (PLACEHOLDER)"
+    pending_clinical_validation: true
+
+  - id: household_share
+    who: chw
+    when: "After each visit"
+    why_template_en: "Share prevention messages with everyone sleeping in the same household."
+    why_template_rw: "Sangiza inama zo kwirinda malaria n'abantu bose basinzira mu nzu imwe."
+    family_msg_en: "Tell neighbours to use nets and clear standing water too."
+    family_msg_rw: "Bwira n'abaturanyi bakoreshe urutoki bakure amazi ahagaze."
+    applies_when: {}
+    source_ref: "CHW health promotion (PLACEHOLDER)"
+    pending_clinical_validation: true

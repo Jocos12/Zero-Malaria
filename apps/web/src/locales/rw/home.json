@@ -1,15 +1,15 @@
 {
-  "greeting": "Murakaza neza",
-  "chwLabel": "CHW · Nyamata",
-  "village": "Bugesera",
-  "subtitle": "Uyobore gusuzuma malaria, wohereze ibaruwa, ukurikirane abo wohereje.",
-  "newPatient": "Tangira isuzuma",
-  "myReferrals": "Abo nohereje",
-  "alerts": "Imenyesha",
-  "facility": "Ibaruwa zo ku kigo nderabuzima",
-  "rbc": "Ikibaho cya RBC",
-  "todayPatients": "Uyu munsi",
-  "pendingReferrals": "Bitegereje",
-  "openAlerts": "Imenyesha",
-  "recent": "Abo baherutse"
+ "greeting": "Murakaza neza",
+ "chwLabel": "CHW · Nyamata",
+ "village": "Bugesera",
+ "subtitle": "Uyobore gusuzuma malaria, wohereze ibaruwa, ukurikirane abo wohereje.",
+ "newPatient": "Tangira isuzuma",
+ "myReferrals": "Abo nohereje",
+ "alerts": "Imenyesha",
+ "facility": "Ibaruwa zo ku kigo nderabuzima",
+ "rbc": "Ikibaho cya RBC",
+ "todayPatients": "Uyu munsi",
+ "pendingReferrals": "Bitegereje",
+ "openAlerts": "Imenyesha",
+ "recent": "Abo baherutse"
 }

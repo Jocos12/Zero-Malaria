@@ -1,5 +1,5 @@
 {
-  "ageMonths": "{{count}} mo",
-  "sexFemale": "female",
-  "sexMale": "male"
+ "ageMonths": "{{count}} mo",
+ "sexFemale": "female",
+ "sexMale": "male"
 }

@@ -65,7 +65,7 @@ export function HomePage() {
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-ink">{t('home.newPatient')}</h3>
             <p className="mt-1 text-sm text-ink-muted">{t('home.subtitle')}</p>
-            <Button className="mt-4 w-full" size="lg" onClick={() => navigate('/m/triage')} rightIcon={<ArrowRight className="h-4 w-4" />}>
+            <Button className="mt-4 w-full" size="lg" onClick={() => navigate('/app/triage')} rightIcon={<ArrowRight className="h-4 w-4" />}>
               {t('home.newPatient')}
             </Button>
           </div>

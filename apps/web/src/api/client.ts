@@ -57,6 +57,102 @@ export type ReferralMessage = {
   read_at?: string | null;
 };
 
+export type ApiError = Error & { status?: number; code?: string; body?: unknown };
+
+export type ActivityCountMetrics = {
+  patients_seen: number;
+  patients_treated: number;
+  rdt_done: number;
+  rdt_positive: number;
+  referred: number;
+};
+
+export type ActivityCountRow = ActivityCountMetrics & {
+  id: string;
+  client_uuid: string;
+  chw_id: string;
+  facility_id: string;
+  date: string;
+  source: 'auto' | 'manual';
+  note?: string | null;
+  version: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+};
+
+export type ActivityCountSummary = {
+  synthetic: boolean;
+  date_from: string;
+  date_to: string;
+  auto_total: ActivityCountMetrics;
+  manual_total: ActivityCountMetrics;
+  combined: ActivityCountMetrics;
+  note: string;
+};
+
+export type ActivityCountUpsertBody = ActivityCountMetrics & {
+  client_uuid: string;
+  date: string;
+  note?: string | null;
+  version?: number | null;
+};
+
+type ActivityCountQuery = Record<string, string | number | boolean | undefined>;
+
+function activityCountsQuery(params?: ActivityCountQuery): string {
+  const q = new URLSearchParams();
+  Object.entries(params || {}).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') q.set(k, String(v));
+  });
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export function activityCountsList(params?: ActivityCountQuery) {
+  return request<ActivityCountRow[]>(`/activity-counts${activityCountsQuery(params)}`);
+}
+
+export function activityCountsSummary(params?: ActivityCountQuery & { period?: 'today' | 'week' }) {
+  return request<ActivityCountSummary>(`/activity-counts/summary${activityCountsQuery(params)}`);
+}
+
+export function activityCountsUpsert(body: ActivityCountUpsertBody) {
+  return request<ActivityCountRow>('/activity-counts', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export function activityCountsConfirm(id: string) {
+  return request<ActivityCountRow>(`/activity-counts/${encodeURIComponent(id)}/confirm`, {
+    method: 'PATCH',
+    body: '{}',
+  });
+}
+
+export async function activityCountsExport(params?: ActivityCountQuery): Promise<Blob> {
+  const res = await authFetch(`/activity-counts/export.csv${activityCountsQuery(params)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(text || res.statusText) as ApiError;
+    err.status = res.status;
+    throw err;
+  }
+  return res.blob();
+}
+
+type SessionStore = {
+  access_token?: string;
+  refresh_token?: string;
+  user?: AuthUser;
+  offline_until?: number;
+};
+
+let refreshInFlight: Promise<boolean> | null = null;
+
 export function clearAuthSession(redirect = true) {
   try {
     sessionStorage.removeItem(SESSION_KEY);
@@ -72,56 +168,217 @@ export function clearAuthSession(redirect = true) {
   }
 }
 
-function authHeaders(): Record<string, string> {
+function readStore(): SessionStore {
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return {};
-    const session = JSON.parse(raw) as { access_token?: string };
-    if (session.access_token) {
-      return { Authorization: `Bearer ${session.access_token}` };
-    }
+    return JSON.parse(raw) as SessionStore;
+  } catch {
+    return {};
+  }
+}
+
+function patchStore(patch: Partial<SessionStore>) {
+  try {
+    const cur = readStore();
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...cur, ...patch }));
   } catch {
     /* ignore */
   }
-  return {};
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders(),
-      ...(init?.headers || {}),
-    },
-    ...init,
-  });
-  if (res.status === 401) {
-    clearAuthSession(true);
-    const text = await res.text();
-    throw new Error(text || 'Unauthorized');
+function authHeaders(): Record<string, string> {
+  const token = readStore().access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function parseAuthCode(detail: unknown): string | undefined {
+  if (typeof detail === 'string') {
+    if (detail.includes('token_missing') || detail === 'Not authenticated') return 'token_missing';
+    if (detail.includes('token_expired') || detail.toLowerCase().includes('expired')) return 'token_expired';
+    if (detail.includes('token_invalid') || detail.toLowerCase().includes('invalid')) return 'token_invalid';
+    return undefined;
   }
+  if (detail && typeof detail === 'object' && 'code' in (detail as object)) {
+    return String((detail as { code?: string }).code || '');
+  }
+  return undefined;
+}
+
+async function tryRefreshSession(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = (async () => {
+    try {
+      const store = readStore();
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ refresh_token: store.refresh_token || undefined }),
+      });
+      if (!res.ok) return false;
+      const data = (await res.json()) as LoginResponse;
+      if (!data.access_token) return false;
+      patchStore({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || store.refresh_token,
+        user: data.user || store.user,
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
+}
+
+type RequestOptions = RequestInit & {
+  /** Skip Content-Type so the browser sets multipart boundary for FormData */
+  formData?: boolean;
+  _retried?: boolean;
+  /** Rebuild body after 401 refresh (consumed FormData/Blob cannot be resent) */
+  rebuildBody?: () => BodyInit | null | undefined;
+};
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const isForm = Boolean(init?.formData || init?.body instanceof FormData);
+  const headers: Record<string, string> = { ...authHeaders() };
+  if (!isForm) headers['Content-Type'] = 'application/json';
+  const extra = init?.headers;
+  if (extra && typeof extra === 'object' && !(extra instanceof Headers)) {
+    Object.assign(headers, extra as Record<string, string>);
+  }
+  // Never force Content-Type on FormData
+  if (isForm) delete headers['Content-Type'];
+
+  const { formData: _fd, _retried, rebuildBody, ...fetchInit } = init || {};
+  void _fd;
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    ...fetchInit,
+    headers,
+  });
+
+  if (res.status === 401) {
+    let code = 'token_invalid';
+    try {
+      const payload = (await res.clone().json()) as { detail?: unknown; code?: string };
+      code = payload.code || parseAuthCode(payload.detail) || code;
+    } catch {
+      /* ignore */
+    }
+    if (!_retried && !path.startsWith('/auth/login') && path !== '/auth/refresh') {
+      const ok = await tryRefreshSession();
+      if (ok) {
+        const retry: RequestOptions = { ...init, _retried: true };
+        if (rebuildBody) retry.body = rebuildBody();
+        return request<T>(path, retry);
+      }
+    }
+    clearAuthSession(true);
+    const err = new Error(code) as ApiError;
+    err.status = 401;
+    err.code = code;
+    throw err;
+  }
+
   if (!res.ok) {
     const text = await res.text();
-    const err = new Error(text || res.statusText) as Error & { status?: number };
+    let body: unknown = text;
+    try {
+      body = text ? JSON.parse(text) : undefined;
+    } catch {
+      /* keep text */
+    }
+    const err = new Error(text || res.statusText) as ApiError;
     err.status = res.status;
+    err.body = body;
+    if (body && typeof body === 'object' && body !== null && 'code' in body) {
+      err.code = String((body as { code?: string }).code || '');
+    }
     throw err;
   }
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
+/**
+ * Authenticated fetch that returns the Response (for SSE).
+ * Same refresh-on-401 as `request` (once), then throws ApiError.
+ */
+export async function authFetch(path: string, init?: RequestOptions): Promise<Response> {
+  const isForm = Boolean(init?.formData || init?.body instanceof FormData);
+  const headers: Record<string, string> = { ...authHeaders() };
+  if (!isForm) headers['Content-Type'] = 'application/json';
+  const extra = init?.headers;
+  if (extra && typeof extra === 'object' && !(extra instanceof Headers)) {
+    Object.assign(headers, extra as Record<string, string>);
+  }
+  if (isForm) delete headers['Content-Type'];
+  const { formData: _fd, _retried, rebuildBody, ...fetchInit } = init || {};
+  void _fd;
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    ...fetchInit,
+    headers,
+  });
+  if (res.status === 401) {
+    let code = 'token_invalid';
+    try {
+      const payload = (await res.clone().json()) as { detail?: unknown; code?: string };
+      code = payload.code || parseAuthCode(payload.detail) || code;
+    } catch {
+      /* ignore */
+    }
+    if (!_retried && !path.startsWith('/auth/login') && path !== '/auth/refresh') {
+      const ok = await tryRefreshSession();
+      if (ok) {
+        const retry: RequestOptions = { ...init, _retried: true };
+        if (rebuildBody) retry.body = rebuildBody();
+        return authFetch(path, retry);
+      }
+    }
+    clearAuthSession(true);
+    const err = new Error(code) as ApiError;
+    err.status = 401;
+    err.code = code;
+    throw err;
+  }
+  return res;
+}
+
+/** @internal unit-test helpers */
+export const __clientTest = { tryRefreshSession, authHeaders, request, patchStore, readStore, authFetch };
+
 export const api = {
   health: () => request<{ status: string }>('/health'),
-  login: (username: string, password: string) =>
-    request<LoginResponse>('/auth/login', {
+  login: async (username: string, password: string) => {
+    const data = await request<LoginResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
-    }),
-  demoLogin: (role: AuthUser['role']) =>
-    request<LoginResponse>('/auth/demo-login', {
+    });
+    patchStore({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      user: data.user,
+    });
+    return data;
+  },
+  demoLogin: async (role: AuthUser['role']) => {
+    const data = await request<LoginResponse>('/auth/demo-login', {
       method: 'POST',
       body: JSON.stringify({ role }),
-    }),
+    });
+    patchStore({
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      user: data.user,
+    });
+    return data;
+  },
   me: () => request<AuthUser>('/auth/me'),
   logout: () => request<{ ok: boolean }>('/auth/logout', { method: 'POST' }),
   listUsers: (params?: Record<string, string | number | undefined>) => {
@@ -227,6 +484,11 @@ export const api = {
     request('/referrals', { method: 'POST', body: JSON.stringify(body) }),
   patchStatus: (id: string, status: string) =>
     request(`/referrals/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  createEventTicket: () =>
+    request<{ ticket: string; expires_in: number }>('/events/ticket', {
+      method: 'POST',
+      body: '{}',
+    }),
   pollEvents: (since?: string) => {
     const q = since ? `?since=${encodeURIComponent(since)}` : '';
     return request<{ events: LiveWireEvent[]; server_at: string }>(`/events/poll${q}`);
@@ -321,6 +583,64 @@ export const api = {
     request<Record<string, unknown>>('/ai/insights', { method: 'POST', body: JSON.stringify(body) }),
   assistantChat: (body: { message: string; language?: string; decision?: string }) =>
     request<Record<string, unknown>>('/assistant/chat', { method: 'POST', body: JSON.stringify(body) }),
-  voiceSpeak: (body: { phrase_id: string; language?: string; text: string }) =>
+  voiceSpeak: (body: { phrase_id?: string; language?: string; text: string }) =>
     request<Record<string, unknown>>('/voice/speak', { method: 'POST', body: JSON.stringify(body) }),
+  voiceCapabilities: (language = 'rw') =>
+    request<Record<string, unknown>>(`/voice/capabilities?language=${encodeURIComponent(language)}`),
+  voiceTranscribe: (blob: Blob, language = 'rw') => {
+    const build = () => {
+      const fd = new FormData();
+      fd.append('file', blob, 'clip.webm');
+      fd.append('language', language);
+      return fd;
+    };
+    return request<{
+      ok?: boolean;
+      text?: string;
+      confidence?: number;
+      provider?: string;
+      language?: string;
+      error?: string;
+      code?: string;
+    }>('/voice/transcribe', {
+      method: 'POST',
+      formData: true,
+      body: build(),
+      rebuildBody: build,
+    });
+  },
+  aiTrace: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/ai/trace', { method: 'POST', body: JSON.stringify(body) }),
+  aiCompare: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/ai/compare', { method: 'POST', body: JSON.stringify(body) }),
+  aiRecommendation: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/ai/recommendation', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiAnswerInsight: (body: Record<string, unknown>) =>
+    request<Record<string, unknown>>('/ai/answer-insight', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  aiHealth: () =>
+    request<{ ok?: boolean; providers?: Record<string, { reachable?: boolean; configured?: boolean }> }>(
+      '/ai/health',
+    ),
+  aiStatus: () =>
+    request<{
+      ok?: boolean;
+      providers?: Record<
+        string,
+        { provider?: string; status?: string; latency_ms?: number; reason?: string; model?: string }
+      >;
+      chat_timeout_seconds?: number;
+    }>('/ai/status'),
+  aiHealthTest: () => request<Record<string, unknown>>('/ai/health/test', { method: 'POST', body: '{}' }),
+
+  activityCountsList,
+  activityCountsSummary,
+  activityCountsUpsert,
+  activityCountsConfirm,
+  activityCountsExport,
 };

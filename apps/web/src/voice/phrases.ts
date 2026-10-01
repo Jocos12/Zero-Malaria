@@ -49,6 +49,31 @@ export const PHRASES = {
     'Severe breathing difficulty, yes or no?',
     'Agorwa cyane n\'uruhuha, yego cyangwa oya?',
   ),
+  pale_palms_or_eyelids: p(
+    'pale_palms_or_eyelids',
+    'Pale palms or very pale inside the eyelids, yes, no, or unknown?',
+    'Umutwe w\'ibiganza cyangwa imbere y\'ijisho byera cyane, yego, oya, cyangwa simbizi?',
+  ),
+  blood_in_stool: p(
+    'blood_in_stool',
+    'Blood in the stool, yes, no, or unknown?',
+    'Amaraso mu nda, yego, oya, cyangwa simbizi?',
+  ),
+  dark_or_bloody_urine: p(
+    'dark_or_bloody_urine',
+    'Dark or bloody urine, yes, no, or unknown?',
+    'Inkari yijimye cyangwa ifite amaraso, yego, oya, cyangwa simbizi?',
+  ),
+  bleeding_nose_gums_skin_or_vomit_blood: p(
+    'bleeding_nose_gums_skin_or_vomit_blood',
+    'Bleeding from nose, gums, skin, or blood in vomit, yes, no, or unknown?',
+    'Kuva amaraso mu zuru, mu kanwa, ku ruhu, cyangwa mu nda, yego, oya, cyangwa simbizi?',
+  ),
+  hemoglobin_g_dl: p(
+    'hemoglobin_g_dl',
+    'If known, what is the hemoglobin in grams per deciliter? You may skip.',
+    'Niba uzi, hemoglobine ni ingahe mu garamu kuri desilita? Ushobora gusimbuka.',
+  ),
   tdr: p(
     'tdr',
     'What is the malaria rapid test result: positive, negative, or invalid?',
@@ -128,15 +153,70 @@ export const PHRASES = {
     'Give home care advice, schedule follow-up, and confirm the decision before closing.',
     'Tanga inama zo kwita mu rugo, teganya gukurikirana, wemeze icyemezo mbere yo gufunga.',
   ),
+  next_treat_1: p(
+    'next_treat_1',
+    'Complete any missing assessment questions if still open.',
+    'Uzuza ibibazo by\'isuzuma bibuze niba biracyari bifunguye.',
+  ),
+  next_treat_2: p(
+    'next_treat_2',
+    'Advise home care and fever follow-up per protocol.',
+    'Tanga inama zo kwita mu rugo no gukurikirana ubushyuhe hakurikijwe amabwiriza.',
+  ),
+  next_treat_3: p(
+    'next_treat_3',
+    'Explain danger signs that require immediate return.',
+    'Sobanura ibimenyetso by\'akaga bisaba gusubira vuba.',
+  ),
+  next_treat_4: p(
+    'next_treat_4',
+    'Confirm this recommendation on screen before you finish.',
+    'Emeza icyifuzo kuri ekrani mbere yo kurangiza.',
+  ),
   next_refer: p(
     'next_refer',
     'Prepare a referral handover and help the patient reach the health center.',
     'Tegeka kohereza umurwayi kandi umufashe kugera ku kigo nderabuzima.',
   ),
+  next_refer_1: p(
+    'next_refer_1',
+    'Prepare a referral handover summary.',
+    'Tegeka incamake yo kohereza umurwayi.',
+  ),
+  next_refer_2: p(
+    'next_refer_2',
+    'Send the patient to the health facility today.',
+    'Ohereza umurwayi ku kigo nderabuzima uyu munsi.',
+  ),
+  next_refer_3: p(
+    'next_refer_3',
+    'Advise caregiver on danger signs while traveling.',
+    'Menyesha umurezi ibimenyetso by\'akaga mu nzira.',
+  ),
   next_urgent_refer: p(
     'next_urgent_refer',
     'Refer urgently now. Stay with the patient if possible and call for transport help.',
     'Ohereza vuba. Guma hafi y\'umurwayi niba bishoboka kandi hamagara ubufasha bwo gutwara.',
+  ),
+  next_urgent_1: p(
+    'next_urgent_1',
+    'Stay with the patient; do not delay.',
+    'Guma hafi y\'umurwayi; ntutinye.',
+  ),
+  next_urgent_2: p(
+    'next_urgent_2',
+    'Arrange urgent transport to the health center.',
+    'Teganya uburyo bwo gutwara vuba ku kigo nderabuzima.',
+  ),
+  next_urgent_3: p(
+    'next_urgent_3',
+    'Tell the nurse the danger signs and RDT result.',
+    'Bwirira umuforomo ibimenyetso by\'akaga n\'igisubizo cya TDR.',
+  ),
+  next_urgent_4: p(
+    'next_urgent_4',
+    'Do not give community doses. Not in this protocol pack.',
+    'Ntanga doze zo mu mudugudu. Ntabwo ziri muri aya mabwiriza.',
   ),
 
   confirm_reminder: p(
@@ -237,6 +317,31 @@ export const PHRASES = {
     'Yes if breathing is fast, noisy, or the chest pulls in with each breath.',
     'Subiza yego niba aruhuka vuba, ijwi ryo guhumeka, cyangwa igifu kinjira mu guhumeka.',
   ),
+  help_pale_palms_or_eyelids: p(
+    'help_pale_palms_or_eyelids',
+    'Check palm color and inside the lower eyelid. This is stored for the nurse; it does not change the urgent decision until clinicians validate the rule.',
+    'Reba ibara ry\'ibiganza n\'imbere y\'ijisho. Byandikwa ku muforomo; ntibihindura icyemezo cyihutirwa kugeza abaganga ba RBC bemeye amategeko.',
+  ),
+  help_blood_in_stool: p(
+    'help_blood_in_stool',
+    'Ask the caregiver if they saw blood in the stool. Inform the nurse if yes. Rules escalation is off until RBC validation.',
+    'Baza umurezi niba yabonye amaraso mu nda. Menyesha umuforomo niba ari yego. Kohereza byihutirwa birafunze kugeza RBC ibemeye.',
+  ),
+  help_dark_or_bloody_urine: p(
+    'help_dark_or_bloody_urine',
+    'Dark or red urine may need nurse review. Your answer is recorded; automated urgency from this alone is disabled.',
+    'Inkari yijimye cyangwa itukura ishobora gusuzumwa n\'umuforomo. Igisubizo cyandikwa; ubwihutirwa bwikora ntibukora kuri iki gusa.',
+  ),
+  help_bleeding_nose_gums_skin_or_vomit_blood: p(
+    'help_bleeding_nose_gums_skin_or_vomit_blood',
+    'Include nose, gums, skin, or vomit with blood. Tell the nurse if yes. You can still refer manually anytime.',
+    'Harimo mu zuru, mu kanwa, ku ruhu, cyangwa mu nda. Menyesha umuforomo niba ari yego. Ushobora kohereza ukivuze igihe cyose.',
+  ),
+  help_hemoglobin_g_dl: p(
+    'help_hemoglobin_g_dl',
+    'Optional lab value in g/dL. Skip if unknown. No automated threshold is applied in this demo.',
+    'Agaciro ko mu garamu kuri desilita (si ngombwa). Simbuka niba utazi. Nta gipimo cyikora mu iyi demo.',
+  ),
   help_tdr: p(
     'help_tdr',
     'Record the rapid diagnostic test result from the cassette. Invalid means the test failed, do not treat on that result alone.',
@@ -256,6 +361,22 @@ export const PHRASES = {
     'confirm_danger_sign',
     'This is a danger sign. Please say yes to confirm, or no if I misunderstood.',
     'Iki ni ikimenyetso cy\'akaga. Vuga yego niba ari ukuri, cyangwa oya niba nabitumvise nabi.',
+  ),
+
+  prompt_yes: p('prompt_yes', 'Yes', 'Yego'),
+  prompt_no: p('prompt_no', 'No', 'Oya'),
+  prompt_yes_common: p('prompt_yes_common', 'Yes', 'Yego'),
+  prompt_no_common: p('prompt_no_common', 'No', 'Oya'),
+  prompt_unknown: p('prompt_unknown', 'Unknown', 'Simbizi'),
+  opt_female: p('opt_female', 'Female', 'Umugore'),
+  opt_male: p('opt_male', 'Male', 'Umugabo'),
+  opt_positive: p('opt_positive', 'Positive', 'Cyiza (positive)'),
+  opt_negative: p('opt_negative', 'Negative', 'Nabi (negative)'),
+  opt_invalid: p('opt_invalid', 'Invalid', 'Nticyemewe'),
+  prompt_skip_hemoglobin: p(
+    'prompt_skip_hemoglobin',
+    'Skip hemoglobin',
+    'Simbuka hemoglobine',
   ),
 } as const satisfies Record<string, PhraseEntry>;
 
@@ -289,13 +410,24 @@ export function buildResultSequence(decision: Decision, triggered_rules: string[
     if (reasonId) seq.push(reasonId);
   }
 
-  if (decision === 'treat_at_home') seq.push('next_treat_at_home');
-  else if (decision === 'refer') seq.push('next_refer');
-  else seq.push('next_urgent_refer');
+  if (decision === 'treat_at_home') {
+    seq.push('next_treat_1', 'next_treat_2', 'next_treat_3', 'next_treat_4');
+  } else if (decision === 'refer') {
+    seq.push('next_refer_1', 'next_refer_2', 'next_refer_3');
+  } else {
+    seq.push('next_urgent_1', 'next_urgent_2', 'next_urgent_3', 'next_urgent_4');
+  }
 
-  seq.push('disclaimer', 'confirm_reminder');
+  seq.push('confirm_reminder');
   return seq;
 }
+
+/** Fixed catalog steps for the Result "What to do now" card (never LLM). */
+export const NEXT_STEPS_BY_DECISION: Record<Decision, PhraseId[]> = {
+  treat_at_home: ['next_treat_1', 'next_treat_2', 'next_treat_3', 'next_treat_4'],
+  refer: ['next_refer_1', 'next_refer_2', 'next_refer_3'],
+  urgent_refer: ['next_urgent_1', 'next_urgent_2', 'next_urgent_3', 'next_urgent_4'],
+};
 
 export const PREVENTION_PHRASE_IDS: PhraseId[] = [
   'prevention_nets',

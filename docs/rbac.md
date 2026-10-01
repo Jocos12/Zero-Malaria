@@ -9,15 +9,27 @@ Synthetic demo data only.
 | --- | --- | --- |
 | `SUPER_ADMIN` | national | Full access including permissions matrix; all users; config; audit. Only role that can create/edit/deactivate SUPER_ADMIN or RBC_ADMIN. |
 | `RBC_ADMIN` | national | Manages HEALTH_CENTER and CHW; geography, facilities, stock, SLA; all dashboards, alerts, funnel, overdue referrals, audit; messages + reassign follow-ups. Cannot edit permissions matrix or SUPER_ADMIN accounts. |
-| `HEALTH_CENTER` | facility | Referral inbox; status updates; messages; own-facility stock; read-only list of CHWs at own facility. |
-| `CHW` | own / village | Own triages, referrals, follow-ups, voice triage. |
+| `HEALTH_CENTER` | facility | Referral inbox; status updates; messages; own-facility stock; read-only list of CHWs at own facility; confirm CHW **activity** counts at the facility (`activity:read|update`). |
+| `CHW` | own / village | Own triages, referrals, follow-ups, voice triage; manual daily **activity** counts (`activity:create|read|update`). |
 
 Legacy `SUPERVISOR` / `RBC_OFFICER` (and lowercase `supervisor` / `rbc`) are **migrated** on startup — never left as live roles. Mapping is audited (`role_migration_4roles`).
 
 ## Permission format
 
-`resource:action` with actions `read | create | update | delete | export | assign`.  
+`resource:action` with actions `read | create | update | delete | export | assign` (+ `voice:use`).  
 Default matrix: `apps/api/app/rbac_matrix.py`. SUPER_ADMIN = all codes; RBC_ADMIN = all except roles/permissions mutate.
+
+| Permission | SUPER_ADMIN | RBC_ADMIN | HEALTH_CENTER | CHW |
+| --- | --- | --- | --- | --- |
+| `voice:use` | yes | yes | yes | yes |
+| `activity:read` | yes | yes | yes | yes |
+| `activity:create` | yes | no | no | yes |
+| `activity:update` | yes | no | yes | yes |
+| `activity:export` | yes | yes | no | no |
+
+`voice:use` gates `/voice/transcribe`, `/voice/speak`, `/voice/capabilities`. Missing/invalid/expired token → **401** with `token_missing` / `token_invalid` / `token_expired`. Missing permission → **403** `missing_permission`. Unconfigured STT → **503** (never 401).
+
+**Activity counts** (`/activity-counts`): CHW manual entry (scoped to own `chw_code`); auto rows are system-derived (`source=auto`). Summary returns `auto_total`, `manual_total`, and `combined` where **combined = auto + manual** (distinct sources, not deduplicated across both).
 
 ## Scope
 

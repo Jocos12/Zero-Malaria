@@ -83,6 +83,20 @@ function applyIntentsToSlot(node: DialogueNode, intents: VoiceIntents): Partial<
     if (intents.negative) return { tdr_result: 'negative' };
     if (intents.invalid) return { tdr_result: 'invalid' };
   }
+  const triSlots = [
+    'pale_palms_or_eyelids',
+    'blood_in_stool',
+    'dark_or_bloody_urine',
+    'bleeding_nose_gums_skin_or_vomit_blood',
+  ] as const;
+  if ((triSlots as readonly string[]).includes(slot)) {
+    if (intents.yes) return { [slot]: 'yes' } as Partial<TriageInput>;
+    if (intents.no) return { [slot]: 'no' } as Partial<TriageInput>;
+    if (intents.unknown) return { [slot]: 'unknown' } as Partial<TriageInput>;
+  }
+  if (slot === 'hemoglobin_g_dl' && intents.number !== undefined) {
+    return { hemoglobin_g_dl: intents.number };
+  }
   return null;
 }
 
@@ -181,8 +195,9 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
       setActive(true);
       voice.unlock();
 
+      const rw = { language: 'rw' as const };
       setConvState('greeting');
-      await voice.play(['guided_greeting']);
+      await voice.play(['guided_greeting'], rw);
       if (abortRef.current) return;
 
       for (const nodeId of TRIAGE_DIALOGUE_ORDER) {
@@ -192,7 +207,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
         handlersRef.current.onNode?.(nodeId);
         setConvState('asking');
 
-        await voice.play([node.phraseId]);
+        await voice.play([node.phraseId], rw);
         if (abortRef.current) break;
 
         let heard = await listenOnce();
@@ -200,7 +215,7 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
 
         let patch = applyIntentsToSlot(node, heard.intents);
         if (!patch && node.repromptPhraseId) {
-          await voice.play([node.repromptPhraseId]);
+          await voice.play([node.repromptPhraseId], rw);
           heard = await listenOnce();
           if (!heard || abortRef.current) break;
           patch = applyIntentsToSlot(node, heard.intents);
@@ -216,11 +231,11 @@ export function ConversationProvider({ children }: { children: ReactNode }) {
           const reasonId = signId ? reasonPhraseIdForRuleOrSign(signId) : null;
           if (reasonId) {
             setConvState('responding');
-            await voice.play([reasonId, 'confirm_danger_sign']);
+            await voice.play([reasonId, 'confirm_danger_sign'], rw);
             setConvState('listening');
             const confirmDanger = await listenOnce();
             if (!confirmDanger?.intents.yes || abortRef.current) {
-              await voice.play([node.repromptPhraseId || node.phraseId]);
+              await voice.play([node.repromptPhraseId || node.phraseId], rw);
               continue;
             }
           }

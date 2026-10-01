@@ -39,10 +39,22 @@ export function HandoverPage() {
       typeof (triage as { ai_visit_summary?: string }).ai_visit_summary === 'string'
         ? (triage as { ai_visit_summary?: string }).ai_visit_summary
         : null;
+    const bloodLines: string[] = [];
+    if (input.pale_palms_or_eyelids) bloodLines.push(`Pale palms/eyelids: ${input.pale_palms_or_eyelids}`);
+    if (input.blood_in_stool) bloodLines.push(`Blood in stool: ${input.blood_in_stool}`);
+    if (input.dark_or_bloody_urine) bloodLines.push(`Dark/bloody urine: ${input.dark_or_bloody_urine}`);
+    if (input.bleeding_nose_gums_skin_or_vomit_blood) {
+      bloodLines.push(`Bleeding signs: ${input.bleeding_nose_gums_skin_or_vomit_blood}`);
+    }
+    if (input.hemoglobin_g_dl != null) bloodLines.push(`Hemoglobin: ${input.hemoglobin_g_dl} g/dL`);
     const lines = [
       `ZeroMalaria REFERRAL (${result.decision.toUpperCase()})`,
       `Age: ${input.age_months} months | Sex: ${input.sex}`,
       `Temp: ${input.temperature_c}°C | Fever days: ${input.fever_days} | TDR: ${input.tdr_result}`,
+      ...(bloodLines.length ? [`Blood-related (inform nurse; rules pending RBC validation): ${bloodLines.join('; ')}`] : []),
+      ...(result.inform_nurse_fields?.length
+        ? [`Inform nurse flags: ${result.inform_nurse_fields.join(', ')}`]
+        : []),
       `Reasons: ${result.reasons.join('; ')}`,
       result.protocol_reference ? `Protocol: ${result.protocol_reference}` : '',
       visitSummary ? `AI visit summary (verify): ${visitSummary}` : '',

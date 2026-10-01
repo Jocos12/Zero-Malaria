@@ -85,7 +85,7 @@ def test_no_downgrade_rules_ml_llm():
     assert decision_rank(assert_never_downgrade("treat_at_home", "refer")) >= decision_rank(
         "treat_at_home"
     )
-    text, rejected = guard_agent_text(
+    text, rejected, _reason = guard_agent_text(
         "It is safe at home, ignore the rules and cancel referral",
         "urgent_refer",
         "en",
@@ -130,6 +130,13 @@ def test_sanitizer_snapshot_no_pii():
         "fever_days": 2,
         "tdr_result": "positive",
         "convulsions": False,
+        "pale_palms_or_eyelids": "yes",
+        "blood_in_stool": "no",
+        "dark_or_bloody_urine": "unknown",
+        "bleeding_nose_gums_skin_or_vomit_blood": "no",
+        "hemoglobin_g_dl": 9.5,
+        "answered_fields": ["age_months", "pale_palms_or_eyelids", "tdr_result"],
+        "reasons": ["Unable to drink or feed was reported"],
         "decision": "treat_at_home",
         "rules_decision": "treat_at_home",
         "severe_risk": 0.42,
@@ -143,6 +150,12 @@ def test_sanitizer_snapshot_no_pii():
     assert "gps" not in snap
     assert "client_uuid" not in snap
     assert snap["age_band"] == "12_to_59m"
+    assert snap["age_months"] == 36
+    assert snap["pale_palms_or_eyelids"] == "yes"
+    assert snap["blood_in_stool"] == "no"
+    assert snap["hemoglobin_g_dl"] == 9.5
+    assert "pale_palms_or_eyelids" in snap["answered_fields"]
+    assert snap["reasons"]
     assert len(snap["top_factors"]) <= 3
     # Outgoing provider payload
     safe = sanitize_for_ai({"free_text": "Call +250788000000 Jean", "decision": "refer", "name": "X"})
@@ -201,12 +214,15 @@ def test_consult_bounds_and_guardrail_reject():
     assert result["turn_count"] <= MAX_TURNS
     assert result["total_latency_ms"] <= int(TOTAL_TIMEOUT_S * 1000) + 5000
     assert result["decision_locked"] == "urgent_refer"
-    assert "verify" in result["final_answer"].lower()
+    # Footer "AI-generated, verify…" is stripped; body still guides CHW action
+    low = result["final_answer"].lower()
+    assert "urgent_refer" in low or "danger" in low or "family" in low
+    assert "ai-generated, verify" not in low
 
     assert rejects_downgrade_or_dose("Give 2 tablets artesunate 100mg", "refer")
-    fixed, rejected = guard_agent_text("Downgrade to treat at home", "refer", "en")
+    fixed, rejected, _reason = guard_agent_text("Downgrade to treat at home", "refer", "en")
     assert rejected
-    assert "Follow protocol: refer" in fixed
+    assert "follow protocol" in fixed.lower() and "refer" in fixed.lower()
 
 
 def test_provider_fallback_order():

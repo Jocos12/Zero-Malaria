@@ -111,8 +111,16 @@ def hash_token(value: str) -> str:
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_expired", "message": "Token expired"},
+        ) from exc
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_invalid", "message": "Invalid token"},
+        ) from exc
 
 
 def write_audit(
@@ -174,13 +182,22 @@ def get_current_user(
     db: Annotated[Session, Depends(get_db)],
 ) -> User:
     if creds is None or not creds.credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_missing", "message": "Not authenticated"},
+        )
     data = decode_token(creds.credentials)
     if data.get("type") not in (None, "access"):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_invalid", "message": "Invalid token type"},
+        )
     user = db.query(User).filter(User.id == data.get("sub")).first()
     if not user or not user.active or user.deleted_at is not None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive or missing")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "token_invalid", "message": "User inactive or missing"},
+        )
     # Normalize role in-memory for downstream checks
     user.role = normalize_role(user.role)
     return user
@@ -220,7 +237,10 @@ def require_permission(code: str) -> Callable:
                 actor_username=user.username,
                 detail=f"required={code}",
             )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing permission")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "missing_permission", "message": "Missing permission", "required": code},
+            )
         return user
 
     return _dep

@@ -72,7 +72,7 @@ export function PresenterMenu() {
     void syncNow();
     setOpen(false);
     push(t('common.startDemo'), 'success');
-    navigate('/m/triage?demo=ml');
+    navigate('/app/triage?demo=ml');
   };
 
   const resetDemo = async () => {

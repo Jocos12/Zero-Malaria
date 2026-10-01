@@ -23,6 +23,19 @@ const DANGER_FIELDS = [
   'severe_breathing_difficulty',
 ] as const;
 
+function isTriYes(value: unknown): boolean | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    if (s === 'yes' || s === 'y' || s === '1' || s === 'true') return true;
+    if (s === 'no' || s === 'n' || s === '0' || s === 'false') return false;
+    if (s === 'unknown' || s === 'simbizi') return false;
+  }
+  return null;
+}
+
 function reasonOf(
   obj: { reason_en: string; reason_rw?: string; protocol_section?: string },
   lang: Lang,
@@ -57,6 +70,8 @@ export function evaluateRules(
   const triggered: string[] = [];
   const reason_details: ReasonDetail[] = [];
   const missing: string[] = [];
+  const informNurse: string[] = [];
+  let pendingBloodValidation = false;
   let decision: Decision = 'treat_at_home';
   const answered = answeredFields ? new Set(answeredFields) : null;
 
@@ -82,6 +97,33 @@ export function evaluateRules(
         answer: true,
         text,
         protocol_section: 'protocol_section' in sign ? String((sign as { protocol_section?: string }).protocol_section || '') : null,
+      });
+    }
+  }
+
+  const bloodSigns = (cfg as { blood_related_signs?: typeof cfg.danger_signs }).blood_related_signs || [];
+  for (const sign of bloodSigns) {
+    const field = sign.field as keyof TriageInput;
+    if ((sign as { status?: string }).status === 'pending_clinical_validation') {
+      pendingBloodValidation = true;
+    }
+    if (!isAnswered(String(field))) continue;
+    if (isTriYes(input[field]) !== true) continue;
+    if ((sign as { inform_nurse?: boolean }).inform_nurse) {
+      informNurse.push(String(field));
+    }
+    if ((sign as { escalation_enabled?: boolean }).escalation_enabled) {
+      decision = 'urgent_refer';
+      triggered.push(sign.id);
+      const text = reasonOf(sign, language, cfg);
+      reasons.push(text);
+      reason_details.push({
+        rule_id: sign.id,
+        field: String(field),
+        answer: true,
+        text,
+        protocol_section:
+          'protocol_section' in sign ? String((sign as { protocol_section?: string }).protocol_section || '') : null,
       });
     }
   }
@@ -200,6 +242,8 @@ export function evaluateRules(
     reason_details,
     missing_info: [...new Set(missing)].sort(),
     protocol_reference,
+    inform_nurse_fields: [...new Set(informNurse)].sort(),
+    pending_blood_clinical_validation: pendingBloodValidation,
   };
 }
 

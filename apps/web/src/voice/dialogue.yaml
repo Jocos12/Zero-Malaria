@@ -71,6 +71,36 @@ nodes:
     danger: true
     confirmation: confirm
     reprompt: breathing
+    next: pale_palms
+  - id: pale_palms
+    phrase_id: pale_palms_or_eyelids
+    slot: pale_palms_or_eyelids
+    expected_intents: [yes, no, unknown]
+    reprompt: pale_palms_or_eyelids
+    next: blood_stool
+  - id: blood_stool
+    phrase_id: blood_in_stool
+    slot: blood_in_stool
+    expected_intents: [yes, no, unknown]
+    reprompt: blood_in_stool
+    next: bloody_urine
+  - id: bloody_urine
+    phrase_id: dark_or_bloody_urine
+    slot: dark_or_bloody_urine
+    expected_intents: [yes, no, unknown]
+    reprompt: dark_or_bloody_urine
+    next: bleeding
+  - id: bleeding
+    phrase_id: bleeding_nose_gums_skin_or_vomit_blood
+    slot: bleeding_nose_gums_skin_or_vomit_blood
+    expected_intents: [yes, no, unknown]
+    reprompt: bleeding_nose_gums_skin_or_vomit_blood
+    next: hemoglobin
+  - id: hemoglobin
+    phrase_id: hemoglobin_g_dl
+    slot: hemoglobin_g_dl
+    expected_intents: [number, unknown]
+    reprompt: hemoglobin_g_dl
     next: tdr
   - id: tdr
     phrase_id: tdr

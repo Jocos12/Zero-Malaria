@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.roles import CHW, HEALTH_CENTER, RBC_ADMIN, SUPER_ADMIN
 
-ACTIONS = ("read", "create", "update", "delete", "export", "assign")
+ACTIONS = ("read", "create", "update", "delete", "export", "assign", "use")
 RESOURCES = (
     "users",
     "roles",
@@ -23,15 +23,20 @@ RESOURCES = (
     "stock",
     "alerts",
     "analytics",
+    "activity",
     "audit_logs",
     "config",
+    "voice",
 )
 
 SCOPES = ("own", "village", "facility", "district", "national")
 
 
 def all_permission_codes() -> list[str]:
-    return [f"{r}:{a}" for r in RESOURCES for a in ACTIONS]
+    # voice:use is the only voice action used in the matrix (not every ACTION combo)
+    codes = [f"{r}:{a}" for r in RESOURCES if r != "voice" for a in ACTIONS if a != "use"]
+    codes.append("voice:use")
+    return codes
 
 
 def _all() -> set[str]:
@@ -48,8 +53,10 @@ DEFAULT_MATRIX: dict[str, set[str]] = {
         _all()
         - _bundle("roles", "create", "update", "delete", "assign")
         - _bundle("permissions", "create", "update", "delete", "assign")
+        - _bundle("activity", "create", "update")
     ),
     HEALTH_CENTER: {
+        *_bundle("activity", "read", "update"),
         *_bundle("referrals", "read", "update"),
         *_bundle("referral_messages", "read", "create"),
         *_bundle("patients", "read"),
@@ -60,8 +67,10 @@ DEFAULT_MATRIX: dict[str, set[str]] = {
         *_bundle("facilities", "read"),
         *_bundle("chw_profiles", "read"),
         *_bundle("users", "read"),
+        "voice:use",
     },
     CHW: {
+        *_bundle("activity", "read", "create", "update"),
         *_bundle("triages", "read", "create"),
         *_bundle("referrals", "read", "create"),
         *_bundle("referral_messages", "read", "create"),
@@ -69,6 +78,7 @@ DEFAULT_MATRIX: dict[str, set[str]] = {
         *_bundle("alerts", "read"),
         *_bundle("patients", "read", "create"),
         *_bundle("villages", "read"),
+        "voice:use",
     },
 }
 

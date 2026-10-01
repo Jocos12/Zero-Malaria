@@ -21,7 +21,7 @@ import {
 } from 'recharts';
 import { MapContainer, CircleMarker, Popup, TileLayer } from 'react-leaflet';
 import { motion } from 'framer-motion';
-import { api } from '../api/client';
+import { activityCountsSummary, api } from '../api/client';
 import { DesktopShell } from '../components/shells';
 import {
   Badge,
@@ -119,6 +119,10 @@ export function RbcPage() {
   const [hotspotSignals, setHotspotSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [demoOnly, setDemoOnly] = useState(false);
+  const [treatedToday, setTreatedToday] = useState<number | null>(null);
+  const [treatedWeek, setTreatedWeek] = useState<number | null>(null);
+  const [treatedAutoToday, setTreatedAutoToday] = useState<number | null>(null);
+  const [treatedManualToday, setTreatedManualToday] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -140,6 +144,32 @@ export function RbcPage() {
         }
       };
 
+      const loadActivity = async () => {
+        if (!online) {
+          setTreatedToday(null);
+          setTreatedWeek(null);
+          setTreatedAutoToday(null);
+          setTreatedManualToday(null);
+          return;
+        }
+        try {
+          const activityParams = district ? { district } : undefined;
+          const [todaySum, weekSum] = await Promise.all([
+            activityCountsSummary({ period: 'today', ...activityParams }),
+            activityCountsSummary({ period: 'week', ...activityParams }),
+          ]);
+          setTreatedToday(todaySum.combined.patients_treated);
+          setTreatedWeek(weekSum.combined.patients_treated);
+          setTreatedAutoToday(todaySum.auto_total.patients_treated);
+          setTreatedManualToday(todaySum.manual_total.patients_treated);
+        } catch {
+          setTreatedToday(null);
+          setTreatedWeek(null);
+          setTreatedAutoToday(null);
+          setTreatedManualToday(null);
+        }
+      };
+
       try {
         const params: Record<string, string> = {};
         if (district) params.district = district;
@@ -151,6 +181,7 @@ export function RbcPage() {
           api.stock(district ? { district } : undefined),
           api.alerts(),
           loadHotspots(),
+          loadActivity(),
         ]);
         setKpis(k);
         setSurge(s);
@@ -166,6 +197,7 @@ export function RbcPage() {
         setStock(MOCK_STOCK);
         setAlerts([{ message: t('alerts.notArrived'), referral: { client_uuid: 'demo' } }]);
         await loadHotspots();
+        await loadActivity();
       } finally {
         setLoading(false);
       }
@@ -271,6 +303,29 @@ export function RbcPage() {
           </div>
         </div>
       </div>
+
+      {treatedToday != null || treatedWeek != null ? (
+        <Card className="mb-4 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            {t('activity.rbcStripTitle')}
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-6">
+            <div>
+              <p className="text-xs text-ink-muted">{t('activity.kpiTreatedToday')}</p>
+              <p className="text-2xl font-bold tabular text-ink">{treatedToday ?? 0}</p>
+              <p className="mt-1 text-xs text-ink-muted">
+                {t('activity.autoTotal')}: {treatedAutoToday ?? 0} · {t('activity.manualTotal')}:{' '}
+                {treatedManualToday ?? 0}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-ink-muted">{t('activity.kpiTreatedWeek')}</p>
+              <p className="text-2xl font-bold tabular text-ink">{treatedWeek ?? 0}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-ink-muted">{t('activity.rbcStripNote')}</p>
+        </Card>
+      ) : null}
 
       {topHotspot ? (
         <Card className="mb-4 border-warning/50 bg-warning/5">

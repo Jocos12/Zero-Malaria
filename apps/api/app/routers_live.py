@@ -4,28 +4,34 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 import uuid
 from datetime import datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user, write_audit
 from app.db import Referral, ReferralMessage, User, get_db
-from app.schemas import ReferralMessageCreate, ReferralMessageOut
 from app.services.live_events import (
     append_event,
-    append_referral_event,
     event_to_wire,
     scoped_events_query,
     user_can_access_referral,
 )
+from app.services.sse_tickets import consume_ticket, issue_ticket
+from app.schemas import ReferralMessageCreate, ReferralMessageOut
 
 router = APIRouter(tags=["live"])
 bearer_optional = HTTPBearer(auto_error=False)
+log = logging.getLogger("zeromalaria.live")
+
+HEARTBEAT_SECONDS = 15
+POLL_INTERVAL_SECONDS = 2
 
 
 def _parse_since(since: str | None) -> datetime:
@@ -38,21 +44,38 @@ def _parse_since(since: str | None) -> datetime:
         raise HTTPException(400, "Invalid since timestamp (use ISO-8601)") from exc
 
 
-def _resolve_user(
+def _user_from_bearer_or_ticket(
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_optional)],
-    access_token: Annotated[str | None, Query(alias="access_token")] = None,
+    ticket: Annotated[str | None, Query()] = None,
+    access_token: Annotated[str | None, Query()] = None,
     db: Session = Depends(get_db),
 ) -> User:
-    token = creds.credentials if creds and creds.credentials else access_token
-    if not token:
-        raise HTTPException(401, "Not authenticated")
-    from app.auth import decode_token
+    """SSE auth: opaque single-use ticket (preferred) or Authorization bearer.
 
-    data = decode_token(token)
-    user = db.query(User).filter(User.id == data.get("sub")).first()
-    if not user or not user.active:
-        raise HTTPException(401, "User inactive or missing")
-    return user
+    Query access_token is rejected (never put JWTs in URLs).
+    """
+    if access_token:
+        raise HTTPException(
+            401,
+            detail="access_token_query_removed",
+        )
+    if ticket:
+        user_id = consume_ticket(ticket)
+        if not user_id:
+            raise HTTPException(401, detail="invalid_or_expired_ticket")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or not user.active:
+            raise HTTPException(401, "User inactive or missing")
+        return user
+    if creds and creds.credentials:
+        from app.auth import decode_token
+
+        data = decode_token(creds.credentials)
+        user = db.query(User).filter(User.id == data.get("sub")).first()
+        if not user or not user.active:
+            raise HTTPException(401, "User inactive or missing")
+        return user
+    raise HTTPException(401, "Not authenticated")
 
 
 def _message_out(row: ReferralMessage) -> ReferralMessageOut:
@@ -65,6 +88,15 @@ def _message_out(row: ReferralMessage) -> ReferralMessageOut:
         created_at=row.created_at,
         read_at=row.read_at,
     )
+
+
+@router.post("/events/ticket")
+def create_event_ticket(
+    user: Annotated[User, Depends(get_current_user)],
+) -> dict[str, Any]:
+    """Issue a short-lived single-use ticket for GET /events (EventSource)."""
+    tid, expires_in = issue_ticket(user.id)
+    return {"ticket": tid, "expires_in": expires_in}
 
 
 @router.get("/events/poll")
@@ -83,34 +115,60 @@ def poll_events(
 
 @router.get("/events")
 async def sse_events(
-    user: Annotated[User, Depends(_resolve_user)],
+    request: Request,
+    user: Annotated[User, Depends(_user_from_bearer_or_ticket)],
     db: Session = Depends(get_db),
     since: str | None = Query(None),
 ) -> StreamingResponse:
     since_dt = _parse_since(since) if since else datetime.utcnow()
+    user_id = user.id
 
     async def generate():
         cursor = since_dt
-        tick = 0
-        while True:
-            db.expire_all()
-            rows = scoped_events_query(db, user, cursor).limit(50).all()
-            for row in rows:
-                wire = event_to_wire(row)
-                yield f"data: {json.dumps(wire)}\n\n"
-                if row.created_at and row.created_at > cursor:
-                    cursor = row.created_at
-            tick += 1
-            if tick % 8 == 0:
-                hb = {
-                    "type": "heartbeat",
-                    "payload": {},
-                    "at": datetime.utcnow().isoformat() + "Z",
-                }
-                yield f"data: {json.dumps(hb)}\n\n"
-            await asyncio.sleep(2)
+        last_hb = time.monotonic()
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    db.expire_all()
+                    # Re-load user scope each tick (session still bound)
+                    u = db.query(User).filter(User.id == user_id).first()
+                    if not u or not u.active:
+                        break
+                    rows = scoped_events_query(db, u, cursor).limit(50).all()
+                    for row in rows:
+                        wire = event_to_wire(row)
+                        yield f"data: {json.dumps(wire)}\n\n"
+                        if row.created_at and row.created_at > cursor:
+                            cursor = row.created_at
+                except Exception:
+                    # Never dump stack traces for expected DB blips during reload
+                    log.debug("sse poll tick failed", exc_info=False)
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+                now = time.monotonic()
+                if now - last_hb >= HEARTBEAT_SECONDS:
+                    # SSE comment heartbeat (not a data event) — keeps proxies alive
+                    yield f": heartbeat {datetime.utcnow().isoformat()}Z\n\n"
+                    last_hb = now
+                await asyncio.sleep(POLL_INTERVAL_SECONDS)
+        except asyncio.CancelledError:
+            return
+        except (GeneratorExit, BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
+        except Exception:
+            log.debug("sse stream ended", exc_info=False)
+            return
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/referrals/{referral_id}/messages", response_model=list[ReferralMessageOut])

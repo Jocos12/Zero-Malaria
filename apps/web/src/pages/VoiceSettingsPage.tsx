@@ -2,6 +2,7 @@ import { Mic, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../api/client';
 import { ChwShell, WebShell } from '../components/shells';
 import { Badge, Button, Card, SegmentedControl } from '../components/ui';
 import { useVoice } from '../voice/VoiceContext';
@@ -31,14 +32,24 @@ export function VoiceSettingsPage() {
   const [speed, setSpeedState] = useState<VoiceSpeed>(getSpeed());
   const [audioPack, setAudioPack] = useState<boolean | null>(null);
   const [cloudOk, setCloudOk] = useState<boolean | null>(null);
+  const [serverCaps, setServerCaps] = useState<Record<string, unknown> | null>(null);
 
   const caps = getLanguageCapabilities(lang);
   const ttsOk = browserTtsMatchesLang(lang);
-  const ttsAvailable = ttsOk || Boolean(audioPack) || Boolean(cloudOk);
+  const ttsRw = serverCaps?.tts_rw as { available?: boolean; mode?: string; self_test?: string } | undefined;
+  const ttsEn = serverCaps?.tts_en as { available?: boolean; mode?: string; self_test?: string } | undefined;
+  const ttsAvailable =
+    lang === 'rw'
+      ? Boolean(ttsRw?.available ?? audioPack)
+      : Boolean(ttsEn?.available ?? (ttsOk || audioPack));
 
   useEffect(() => {
     void probePreRecordedAudio(lang).then(setAudioPack);
     void probeCloudReachable().then(setCloudOk);
+    void api
+      .voiceCapabilities(lang)
+      .then((r) => setServerCaps(r))
+      .catch(() => setServerCaps(null));
   }, [lang]);
 
   const shell = (children: React.ReactNode) =>
@@ -94,9 +105,22 @@ export function VoiceSettingsPage() {
                   : t('voiceSettings.unavailable')}
             </Badge>
           </li>
+          {serverCaps ? (
+            <li className="flex items-center justify-between gap-2 text-xs text-ink-muted">
+              <span>{t('voiceSettings.serverSelfTest')}</span>
+              <span>
+                {lang === 'rw'
+                  ? (ttsRw?.self_test ?? t('voiceSettings.unavailable'))
+                  : (ttsEn?.self_test ?? t('voiceSettings.unavailable'))}
+              </span>
+            </li>
+          ) : null}
         </ul>
-        {lang === 'rw' && !ttsOk && !audioPack ? (
+        {lang === 'rw' && !ttsAvailable ? (
           <p className="mt-3 text-xs text-ink-muted">{t('voiceSettings.rwHonestHint')}</p>
+        ) : null}
+        {lang === 'en' && ttsEn?.self_test === 'fail_missing_credentials' ? (
+          <p className="mt-3 text-xs text-ink-muted">{t('voiceSettings.vertexMissingCreds')}</p>
         ) : null}
       </Card>
 
@@ -106,16 +130,16 @@ export function VoiceSettingsPage() {
         <div className="mt-4">
           <p className="mb-2 text-sm font-semibold">{t('voiceSettings.speed')}</p>
           <SegmentedControl
-            value={String(speed) as '0.8' | '1' | '1.2'}
+            value={String(speed) as '0.75' | '1' | '1.25'}
             onChange={(v) => {
               const n = Number(v) as VoiceSpeed;
               setSpeed(n);
               setSpeedState(n);
             }}
             options={[
-              { value: '0.8', label: '0.8×' },
+              { value: '0.75', label: '0.75×' },
               { value: '1', label: '1×' },
-              { value: '1.2', label: '1.2×' },
+              { value: '1.25', label: '1.25×' },
             ]}
           />
         </div>

@@ -1,53 +1,53 @@
 {
-  "groups": {
-    "common": [
-      "common",
-      "nav",
-      "login",
-      "lang",
-      "about",
-      "format",
-      "validation",
-      "presenter",
-      "status",
-      "liveDemo",
-      "prevention",
-      "landing",
-      "authx"
-    ],
-    "triage": [
-      "home",
-      "triage",
-      "result",
-      "handover"
-    ],
-    "referrals": [
-      "referrals",
-      "facility",
-      "messages",
-      "patients",
-      "users"
-    ],
-    "dashboard": [
-      "rbc",
-      "supplies"
-    ],
-    "voice": [
-      "voice",
-      "voiceSettings",
-      "voiceReview"
-    ],
-    "alerts": [
-      "alerts",
-      "events"
-    ],
-    "roles": [
-      "auth"
-    ],
-    "errors": [],
-    "time": [
-      "time"
-    ]
-  },
-  "note": "Top-level *.json files are loaded and merged into the translation namespace; groups document the Phase-1 layout."
+ "groups": {
+ "common": [
+ "common",
+ "nav",
+ "login",
+ "lang",
+ "about",
+ "format",
+ "validation",
+ "presenter",
+ "status",
+ "liveDemo",
+ "prevention",
+ "landing",
+ "authx"
+ ],
+ "triage": [
+ "home",
+ "triage",
+ "result",
+ "handover"
+ ],
+ "referrals": [
+ "referrals",
+ "facility",
+ "messages",
+ "patients",
+ "users"
+ ],
+ "dashboard": [
+ "rbc",
+ "supplies"
+ ],
+ "voice": [
+ "voice",
+ "voiceSettings",
+ "voiceReview"
+ ],
+ "alerts": [
+ "alerts",
+ "events"
+ ],
+ "roles": [
+ "auth"
+ ],
+ "errors": [],
+ "time": [
+ "time"
+ ]
+ },
+ "note": "Top-level *.json files are loaded and merged into the translation namespace; groups document the Phase-1 layout."
 }

@@ -27,7 +27,6 @@ export function LanguagePage() {
             [
               { id: 'rw' as const, label: t('lang.kinyarwanda'), Icon: Languages },
               { id: 'en' as const, label: t('lang.english'), Icon: Globe2 },
-              { id: 'fr' as const, label: t('lang.french'), Icon: Globe2 },
             ]
           ).map((opt) => (
             <button

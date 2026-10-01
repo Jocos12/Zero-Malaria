@@ -3,32 +3,55 @@
 **Decision support tool. Not a replacement for clinical judgment.**  
 **Synthetic demo data** only.
 
-## Current sprint: AI visibility + consult (2026-09-30)
+## Current sprint: Web-only app, treated counts, blood Qs, read-aloud, global AI — 2026-10-01
 
-**Branch:** `test-merge-ardent` (do not touch `main`).
+**Branch:** `feature/result-modal` (local only — do not push; do not edit `main`).
 
-### Done
+### Assumptions
 
-1. **AI insights on Result** — risk gauge, top-3 SHAP factors, provenance chips, provider/latency/fallback; Rules only / Rules+AI toggle; ML escalation banner; offline message; visit summary via `/ai/visit-summary` (attached to handover).
-2. **Ask about this case** — chips + free text + mic; `POST /ai/ask` on sanitized snapshot; protocol-only answers; out-of-scope → nurse.
-3. **AI consult** — three agents (Triage/Guideline/Referral), max 2 rounds / 6 turns / timeouts; final answer first; expandable transcript; follow-up round; escalate-only + dose/injection rejection; activity logging without free text.
-4. **AI activity page** (`/app/ai-activity`) for RBC/supervisor roles — aggregate counts only.
-5. **Seeded demo** — `/m/triage?demo=ml` → rules `treat_at_home`, synthetic ML score 0.42 escalates to `refer` (threshold unchanged at 0.35).
-6. **UI** — full ZeroMalaria logo text; voice aria-labels (Read aloud / Record / Repeat / Slow / Pause / Volume) in rw/en/fr; French locale pack + language picker.
+- One responsive WebShell; `/m/*` = redirects only.
+- Patients = merged API + Dexie; badges match list counts.
+- Blood questions stored/shown; escalation off until SUPER_ADMIN enables YAML flag.
+- Treated counts: auto + manual never double-counted within a source; combined = auto + manual.
+- Read-aloud from phrase packs; never English voice for Kinyarwanda.
+- No U+2014/U+2013 or lone `-` as empty placeholder (i18n:check enforced).
+- Blood / prevention / RW phrases not presented as clinically validated.
+- Live SSE: no JWT in query string; short-lived single-use ticket; RBAC scope on poll/SSE.
 
-### Gates (this sprint)
+### Implemented
 
-| Check | Result |
+| Step | Status |
 | --- | --- |
-| pytest | **101 passed** |
-| npm run build | **OK** |
-| npm run lint | **OK** (2 warnings) |
-| npm run i18n:check | **OK** (725 keys) |
+| 0 Audit | Done |
+| 1 Web-only + patients + placeholders | Done |
+| 2 Treated-patient activity_counts + UI | Done |
+| 3 Blood questions (pending validation) | Done |
+| 4 Global AI + RBAC data tools | Done |
+| 5 Read-aloud triage | Done |
+| 6 Design polish (web shell / templates) | Partial (web-only shell; PageHeader polish light) |
+| 7 Tests / docs / gates | Done |
+| SSE ticket + reconnect robustness | Done (2026-10-01) |
 
-### Known limits
+### SSE / live events (2026-10-01)
 
-- Live Gemini/Groq still fall back to local without keys (empty in `.env.example`).
-- RW AI strings marked needs native review / draft in `_review.json`.
-- ML escalate demo uses `demo_scenario=ml_escalate` synthetic score (architecture demo); real model scores are often below threshold on uncomplicated cases.
-- French UI falls back to English for namespaces not fully translated beyond the en→fr clone + AI overlays.
-- Pre-recorded RW MP3 pack still missing (text fallback).
+- `POST /events/ticket` (auth) → opaque ticket, TTL 30s, single-use.
+- `GET /events?ticket=…` (no `access_token` query; rejected if present).
+- Heartbeat SSE comment every 15s; `X-Accel-Buffering: no`; clean client disconnect.
+- Access logs mask `ticket` / `access_token` / `refresh_token`.
+- Web: ticket + EventSource, exponential backoff reconnect, `/events/poll` fallback (no console spam).
+- Vite proxy: silence expected ECONNRESET on `/events`.
+- `make dev` / `scripts/dev.ps1` for uvicorn `--reload` + clear missing-venv error.
+
+### Mocked / not verified
+
+- Live Gemini when quota exhausted (falls back Local / Groq).
+- Vertex TTS / MMS-TTS Kinyarwanda when credentials missing (honest unavailable + text).
+- Full Playwright matrix for treated-counts + read-aloud phrase ids (unit/API covered; e2e shell/chat updated to `/app`).
+
+### Gates log
+
+| Step | pytest | build | lint | i18n:check |
+| --- | --- | --- | --- | --- |
+| Prior (chat dossier) | OK (158) | OK | OK | OK (929) |
+| This sprint | OK (170) | OK | OK (2 warn) | OK (1012 keys, 593 draft) |
+| SSE ticket / reconnect | OK (179) | OK | OK (2 warn) | OK (1017 keys, 598 draft) |

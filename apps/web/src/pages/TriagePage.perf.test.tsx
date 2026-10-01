@@ -88,13 +88,13 @@ function mountTriage(container: HTMLElement): Root {
   const root = createRoot(container);
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={['/m/triage']}>
+      <MemoryRouter initialEntries={['/app/triage']}>
         <ThemeProvider>
           <ToastProvider>
             <VoiceProvider>
               <ConversationProvider>
                 <Routes>
-                  <Route path="/m/triage" element={<TriagePage />} />
+                  <Route path="/app/triage" element={<TriagePage />} />
                 </Routes>
               </ConversationProvider>
             </VoiceProvider>

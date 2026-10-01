@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ChwShell, WebShell } from '../components/shells';
+import { WebShell } from '../components/shells';
 
-/** Prefer WebShell for any /app/* route (desktop workspace). */
+/** True for /app/* (all product routes after web-only unification). */
 export function useIsAppRoute(): boolean {
   const { pathname } = useLocation();
-  return pathname.startsWith('/app');
+  return pathname.startsWith('/app') || !pathname.startsWith('/m');
 }
 
+/** Single web shell for every role and route. */
 export function AppOrChwShell({
   title,
   crumbs,
@@ -17,13 +18,9 @@ export function AppOrChwShell({
   crumbs?: string[];
   children: ReactNode;
 }) {
-  const isApp = useIsAppRoute();
-  if (isApp) {
-    return (
-      <WebShell title={title} crumbs={crumbs || [title]}>
-        {children}
-      </WebShell>
-    );
-  }
-  return <ChwShell title={title}>{children}</ChwShell>;
+  return (
+    <WebShell title={title} crumbs={crumbs || [title]}>
+      {children}
+    </WebShell>
+  );
 }

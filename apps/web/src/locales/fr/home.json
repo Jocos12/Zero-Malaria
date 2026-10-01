@@ -1,15 +1,15 @@
 {
-  "greeting": "Good day",
-  "chwLabel": "CHW · Nyamata",
-  "village": "Bugesera",
-  "subtitle": "Guide malaria triage, send a handover, and track referrals.",
-  "newPatient": "Start new triage",
-  "myReferrals": "My referrals",
-  "alerts": "Alerts",
-  "facility": "Health center inbox",
-  "rbc": "RBC dashboard",
-  "todayPatients": "Today",
-  "pendingReferrals": "Pending",
-  "openAlerts": "Alerts",
-  "recent": "Recent patients"
+ "greeting": "Good day",
+ "chwLabel": "CHW · Nyamata",
+ "village": "Bugesera",
+ "subtitle": "Guide malaria triage, send a handover, and track referrals.",
+ "newPatient": "Start new triage",
+ "myReferrals": "My referrals",
+ "alerts": "Alerts",
+ "facility": "Health center inbox",
+ "rbc": "RBC dashboard",
+ "todayPatients": "Today",
+ "pendingReferrals": "Pending",
+ "openAlerts": "Alerts",
+ "recent": "Recent patients"
 }

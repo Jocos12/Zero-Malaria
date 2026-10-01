@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Activity,
@@ -38,7 +38,7 @@ import { useSync } from '../sync/SyncContext';
 import { useTheme } from '../theme/ThemeContext';
 import { setLanguage } from '../i18n';
 import { db } from '../db';
-import { Badge, Button, Disclaimer, IconButton, StatusPill, SyntheticBadge } from './ui';
+import { Badge, IconButton, StatusPill, SyntheticBadge } from './ui';
 import { PresenterMenu } from './PresenterMenu';
 import { cn } from '../lib/cn';
 import { easeOut, pageVariants } from '../lib/motion';
@@ -46,11 +46,8 @@ import { useAuth, type UserRole } from '../auth/AuthContext';
 import {
   ALL_ROLES,
   BROAD_ROLES,
-  DESKTOP_MIN_WIDTH,
   normalizeRole,
   roleI18nKey,
-  setPreferredView,
-  webHomePath,
 } from '../auth/roleAccess';
 import { api } from '../api/client';
 
@@ -65,15 +62,27 @@ function LogoMark({ compact }: { compact?: boolean }) {
   const { t } = useTranslation();
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-control bg-primary text-primary-foreground">
-        <Activity className="h-5 w-5" strokeWidth={1.75} />
-      </div>
+      <img
+        src="/favicon.svg"
+        alt=""
+        width={36}
+        height={36}
+        className="h-9 w-9 shrink-0 rounded-[10px] shadow-sm"
+        data-testid="app-logo"
+      />
       {!compact ? (
-        <div className="min-w-0">
-          <p className="text-sm font-bold leading-tight text-ink whitespace-normal break-words">
+        <div className="min-w-0 overflow-visible">
+          <p
+            className="text-sm font-bold leading-tight text-ink whitespace-normal break-words"
+            data-testid="app-name"
+            title={t('common.appName')}
+          >
             {t('common.appName')}
           </p>
-          <p className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-ink-muted" title={t('common.tagline')}>
+          <p
+            className="mt-0.5 text-[10px] leading-snug text-ink-muted whitespace-normal break-words"
+            title={t('common.tagline')}
+          >
             {t('common.tagline')}
           </p>
         </div>
@@ -91,177 +100,6 @@ function SyncPill() {
     return <Badge tone="info">{t('common.pending', { count: pending })}</Badge>;
   }
   return <StatusPill status={effective} />;
-}
-
-export function ChwShell({ children, title }: { children: ReactNode; title?: string }) {
-  const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const reduce = useReducedMotion();
-  const [alertCount, setAlertCount] = useState(0);
-  const [refCount, setRefCount] = useState(0);
-  const [isDesktop, setIsDesktop] = useState(
-    () => typeof window !== 'undefined' && window.innerWidth >= DESKTOP_MIN_WIDTH,
-  );
-
-  useEffect(() => {
-    const onResize = () => setIsDesktop(window.innerWidth >= DESKTOP_MIN_WIDTH);
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
-    void (async () => {
-      const refs = await db.referrals.toArray();
-      setRefCount(refs.length);
-      const cutoff = Date.now() - 24 * 3600 * 1000;
-      setAlertCount(
-        refs.filter(
-          (r) =>
-            !r.arrived_at &&
-            ['sent', 'received'].includes(r.status) &&
-            new Date(r.created_at).getTime() <= cutoff,
-        ).length,
-      );
-    })();
-  }, [location.pathname]);
-
-  const hideTabs =
-    location.pathname.endsWith('/triage') ||
-    location.pathname.endsWith('/result') ||
-    location.pathname.endsWith('/handover');
-
-  return (
-    <div className="min-h-screen bg-app">
-      {isDesktop ? (
-        <div
-          className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/20 bg-primary-soft px-4 py-2 text-sm"
-          data-testid="open-web-banner"
-        >
-          <p className="min-w-0 text-ink">{t('common.openWebVersionHint')}</p>
-          <Button
-            size="sm"
-            onClick={() => {
-              setPreferredView('web');
-              navigate('/app/home');
-            }}
-          >
-            {t('common.openWebVersion')}
-          </Button>
-        </div>
-      ) : null}
-      <div className="mx-auto flex min-h-screen max-w-chw flex-col border-x border-border/60 bg-app shadow-card sm:min-h-[calc(100vh-0px)] md:my-4 md:min-h-[calc(100vh-2rem)] md:overflow-hidden md:rounded-[36px] md:border md:border-white/70 md:bg-app/60 md:shadow-lift dark:md:border-white/10">
-        <header className="zm-glass zm-glass-strong sticky top-0 z-30 flex items-center justify-between gap-2 !border-x-0 !border-t-0 px-4 py-3 !shadow-none">
-          <LogoMark />
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <SyntheticBadge label={t('common.synthetic')} />
-            <SyncPill />
-            <IconButton
-              label={i18n.language.startsWith('rw') ? 'RW' : 'EN'}
-              showLabel
-              onClick={() => setLanguage(i18n.language.startsWith('rw') ? 'en' : 'rw')}
-            >
-              <Languages className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </IconButton>
-            <PresenterMenu />
-          </div>
-        </header>
-
-        {title ? (
-          <div className="border-b border-border px-4 py-3">
-            <h1 className="truncate text-lg font-semibold text-ink" title={title}>
-              {title}
-            </h1>
-          </div>
-        ) : null}
-
-        <motion.main
-          key={location.pathname + location.search}
-          className={cn(
-            'relative flex-1 px-4 py-4',
-            !hideTabs && 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]',
-          )}
-          variants={reduce ? undefined : pageVariants}
-          initial="initial"
-          animate="animate"
-          transition={easeOut}
-        >
-          {children}
-          <div className="mt-6">
-            <Disclaimer text={t('common.disclaimer')} />
-            <p className="mt-2 text-xs text-ink-muted">{t('common.synthetic')}</p>
-          </div>
-        </motion.main>
-
-        {!hideTabs ? (
-          <nav
-            className="fixed bottom-0 left-1/2 z-30 w-full max-w-chw -translate-x-1/2 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2"
-            data-testid="mobile-tab-bar"
-          >
-            <div className="zm-glass zm-glass-strong mx-auto grid max-w-chw grid-cols-4 gap-1 rounded-[30px] p-1.5">
-              <Tab to="/m/home" icon={<Home className="h-5 w-5" strokeWidth={1.75} />} label={t('nav.home')} />
-              <Tab
-                to="/m/triage"
-                icon={<Plus className="h-5 w-5" strokeWidth={1.75} />}
-                label={t('nav.new')}
-                emphasize
-              />
-              <Tab
-                to="/m/referrals"
-                icon={<Stethoscope className="h-5 w-5" strokeWidth={1.75} />}
-                label={t('nav.referrals')}
-                badge={refCount || undefined}
-              />
-              <Tab
-                to="/m/alerts"
-                icon={<AlertTriangle className="h-5 w-5" strokeWidth={1.75} />}
-                label={t('nav.alerts')}
-                dot={alertCount > 0}
-              />
-            </div>
-          </nav>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function Tab({
-  to,
-  icon,
-  label,
-  badge,
-  dot,
-  emphasize,
-}: {
-  to: string;
-  icon: ReactNode;
-  label: string;
-  badge?: number;
-  dot?: boolean;
-  emphasize?: boolean;
-}) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        cn(
-          'relative flex touch-target flex-col items-center justify-center gap-0.5 rounded-control px-1 py-1 text-[11px] font-semibold',
-          emphasize && 'mx-1 -mt-3 rounded-full bg-primary px-0 py-3 text-primary-foreground shadow-card',
-          !emphasize && (isActive ? 'text-primary' : 'text-ink-muted'),
-        )
-      }
-    >
-      <span className="relative">
-        {icon}
-        {dot ? <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-danger" /> : null}
-        {badge ? (
-          <span className="absolute -right-3 -top-2 rounded-full bg-danger px-1 text-[9px] text-white">{badge}</span>
-        ) : null}
-      </span>
-      {!emphasize ? label : <span className="sr-only">{label}</span>}
-    </NavLink>
-  );
 }
 
 type NavItem = {
@@ -302,6 +140,7 @@ export function WebShell({
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [mainScrolled, setMainScrolled] = useState(false);
   const [overdueAlerts, setOverdueAlerts] = useState<{ id: string; summary: string }[]>([]);
+  const [referralCount, setReferralCount] = useState(0);
   const notifRef = useRef<HTMLDivElement>(null);
   const avatarRef = useRef<HTMLDivElement>(null);
 
@@ -320,11 +159,36 @@ export function WebShell({
     }
   }, [t]);
 
+  const loadReferralCount = useCallback(async () => {
+    try {
+      let remote: { client_uuid?: string; id?: string }[] = [];
+      try {
+        remote = (await api.scopedReferrals()) as { client_uuid?: string; id?: string }[];
+      } catch {
+        remote = (await api.referrals()) as { client_uuid?: string; id?: string }[];
+      }
+      const local = await db.referrals.toArray();
+      const seen = new Set<string>();
+      for (const r of [...remote, ...local]) {
+        const k = String(r.client_uuid || r.id || '');
+        if (k) seen.add(k);
+      }
+      setReferralCount(seen.size);
+    } catch {
+      const local = await db.referrals.toArray();
+      setReferralCount(local.length);
+    }
+  }, []);
+
   useEffect(() => {
     void loadAlerts();
-    const id = window.setInterval(() => void loadAlerts(), 15000);
+    void loadReferralCount();
+    const id = window.setInterval(() => {
+      void loadAlerts();
+      void loadReferralCount();
+    }, 15000);
     return () => window.clearInterval(id);
-  }, [loadAlerts]);
+  }, [loadAlerts, loadReferralCount]);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
@@ -358,14 +222,20 @@ export function WebShell({
   const navItems: NavItem[] = useMemo(
     () => [
       { to: '/app/home', label: t('nav.home'), icon: Home, roles: ['CHW'] },
-      { to: '/m/triage', label: t('nav.newTriage'), icon: Plus, roles: ['CHW'] },
-      { to: '/app/my-patients', label: t('nav.myPatients'), icon: Users, roles: ['CHW'] },
+      { to: '/app/triage', label: t('nav.newTriage'), icon: Plus, roles: ['CHW'] },
+      {
+        to: '/app/my-patients',
+        label: t('nav.myPatients'),
+        icon: Users,
+        roles: ['CHW'],
+        badge: referralCount || undefined,
+      },
       {
         to: '/app/my-referrals',
         label: t('nav.myReferrals'),
         icon: Stethoscope,
         roles: ['CHW'],
-        badge: overdueAlerts.length || undefined,
+        badge: referralCount || undefined,
       },
       { to: '/app/alerts', label: t('nav.alerts'), icon: AlertTriangle, roles: ['CHW'] },
       { to: '/app/dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, roles: [...BROAD_ROLES] },
@@ -443,7 +313,7 @@ export function WebShell({
         group: 'settings',
       },
     ],
-    [t, overdueAlerts.length],
+    [t, overdueAlerts.length, referralCount],
   );
 
   const normalizedRole = role ? normalizeRole(role) : undefined;
@@ -767,28 +637,6 @@ export function WebShell({
                         </button>
                         <button
                           type="button"
-                          className="flex w-full px-3 py-2.5 text-left text-sm hover:bg-surface-muted"
-                          onClick={() => {
-                            setPreferredView('web');
-                            setAvatarOpen(false);
-                            navigate(webHomePath(role || 'CHW'));
-                          }}
-                        >
-                          {t('common.webView')}
-                        </button>
-                        <button
-                          type="button"
-                          className="flex w-full px-3 py-2.5 text-left text-sm hover:bg-surface-muted"
-                          onClick={() => {
-                            setPreferredView('mobile');
-                            setAvatarOpen(false);
-                            navigate('/m/home');
-                          }}
-                        >
-                          {t('common.mobileView')}
-                        </button>
-                        <button
-                          type="button"
                           className="flex w-full items-center gap-2 px-3 py-3 text-left text-sm hover:bg-surface-muted"
                           onClick={() => void logout().then(() => navigate('/login'))}
                         >
@@ -863,6 +711,15 @@ export function WebShell({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** @deprecated Phone-frame shell removed; alias to WebShell. */
+export function ChwShell({ children, title }: { children: ReactNode; title?: string }) {
+  return (
+    <WebShell title={title || ''} crumbs={title ? [title] : undefined}>
+      {children}
+    </WebShell>
   );
 }
 
